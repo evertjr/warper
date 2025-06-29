@@ -233,6 +233,8 @@ function WarpEffect({
   const panStart = useRef(new THREE.Vector2(0, 0));
   const initialPan = useRef(new THREE.Vector2(0, 0));
   const initialZoom = useRef(1);
+  const prevHistoryIndex = useRef(-1);
+  const justAddedHistory = useRef(false);
 
   const displayMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
 
@@ -342,35 +344,74 @@ function WarpEffect({
   const camera = useThree((state) => state.camera);
   const meshRef = useRef<THREE.Mesh>(null);
 
+  // Orthographic camera for full-screen quad rendering (FBO copies)
+  const orthoCamera = useMemo(
+    () => new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
+    []
+  );
+
   // Update brushMaterial uniform when UI changes
   useEffect(() => {
     brushMaterial.uniforms.uBrushSize.value = brushSize / 200 / zoom;
     brushMaterial.uniforms.uBrushStrength.value = brushStrength / 100;
   }, [brushSize, brushStrength, zoom, brushMaterial]);
 
-  // Restore texture from history when undo/redo is triggered
-  useEffect(() => {
-    if (history && history.length > 0 && historyIndex >= 0) {
-      const displacementToRestore = history[historyIndex];
-      const fbo = fbosRef.current[currentFBOIndex.current];
+  // Function to restore displacement from history
+  const restoreFromHistory = useCallback(
+    (targetHistoryIndex: number) => {
+      if (
+        history &&
+        history.length > 0 &&
+        targetHistoryIndex >= 0 &&
+        targetHistoryIndex < history.length &&
+        fbosRef.current.length > 0
+      ) {
+        const displacementToRestore = history[targetHistoryIndex];
+        // Copy the displacement texture into both FBOs so that further strokes continue from correct state
+        fbosRef.current.forEach((targetFBO) => {
+          const tempScene = new THREE.Scene();
+          const tempQuad = new THREE.Mesh(
+            new THREE.PlaneGeometry(2, 2),
+            new THREE.MeshBasicMaterial({ map: displacementToRestore })
+          );
+          tempScene.add(tempQuad);
 
-      const tempScene = new THREE.Scene();
-      const tempQuad = new THREE.Mesh(
-        new THREE.PlaneGeometry(2, 2),
-        new THREE.MeshBasicMaterial({ map: displacementToRestore })
-      );
-      tempScene.add(tempQuad);
+          gl.setRenderTarget(targetFBO);
+          gl.render(tempScene, orthoCamera);
+          gl.setRenderTarget(null);
+        });
 
-      gl.setRenderTarget(fbo);
-      gl.render(tempScene, camera);
-      gl.setRenderTarget(null);
-
-      // Update display material displacement uniform
-      if (displayMaterialRef.current) {
-        displayMaterialRef.current.uniforms.uDisplacement.value = fbo.texture;
+        // Update display material displacement uniform to use the currently active FBO
+        if (displayMaterialRef.current) {
+          displayMaterialRef.current.uniforms.uDisplacement.value =
+            fbosRef.current[currentFBOIndex.current].texture;
+        }
       }
+    },
+    [history, gl, orthoCamera]
+  );
+
+  // Restore texture from history when historyIndex changes (undo/redo)
+  useEffect(() => {
+    // Skip restoration right after adding new history entry
+    if (justAddedHistory.current) {
+      justAddedHistory.current = false;
+      prevHistoryIndex.current = historyIndex;
+      return;
     }
-  }, [history, historyIndex, fbosRef, gl, camera]);
+
+    if (
+      history.length > 0 &&
+      historyIndex >= 0 &&
+      historyIndex < history.length &&
+      !isWarping &&
+      historyIndex !== prevHistoryIndex.current
+    ) {
+      restoreFromHistory(historyIndex);
+    }
+
+    prevHistoryIndex.current = historyIndex;
+  }, [historyIndex, history.length, isWarping, restoreFromHistory]);
 
   useEffect(() => {
     if (!texture) return;
@@ -432,8 +473,35 @@ function WarpEffect({
     } else if (isWarping) {
       setIsWarping(false);
 
-      // For now, just ensure displacement persists (we'll add history back once this works)
-      console.log("Warp ended, displacement should persist");
+      // Save current displacement state to history
+      if (fbosRef.current.length > 0) {
+        const currentDisp = fbosRef.current[currentFBOIndex.current];
+        const w = currentDisp.width;
+        const h = currentDisp.height;
+
+        // Create a snapshot of the current displacement
+        const snapshotRT = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
+        const tempScene = new THREE.Scene();
+        const tempQuad = new THREE.Mesh(
+          new THREE.PlaneGeometry(2, 2),
+          new THREE.MeshBasicMaterial({ map: currentDisp.texture })
+        );
+        tempScene.add(tempQuad);
+
+        gl.setRenderTarget(snapshotRT);
+        gl.render(tempScene, orthoCamera);
+        gl.setRenderTarget(null);
+
+        // Add to history
+        const newHistory = [
+          ...history.slice(0, historyIndex + 1),
+          snapshotRT.texture,
+        ];
+        onHistoryChange(newHistory);
+
+        // Mark that we just added history so the upcoming historyIndex change doesn't trigger restoration
+        justAddedHistory.current = true;
+      }
     }
   };
 

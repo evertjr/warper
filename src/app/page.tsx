@@ -7,11 +7,13 @@ import {
   RotateCcw,
   Sliders,
   Undo2,
+  Upload,
   ZoomOut,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import WarpCanvas from "./WarpCanvas";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 export type HistoryItem = THREE.Texture;
 
@@ -47,6 +49,7 @@ export default function Home() {
   >(null);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Debug when export function changes
   useEffect(() => {
@@ -91,6 +94,15 @@ export default function Home() {
       reader.onload = (e) => {
         if (e.target && typeof e.target.result === "string") {
           setImage(e.target.result);
+          // Reset state when loading new image
+          setHistory([]);
+          setHistoryIndex(-1);
+          setPanX(0);
+          setPanY(0);
+          setZoom(1);
+          setExportFunction(null);
+          setIsImageLoaded(false);
+
           // Get original image dimensions
           const img = new Image();
           img.onload = () => {
@@ -107,6 +119,12 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to load image", error);
       alert("Unable to load this image format.");
+    }
+  };
+
+  const handleLoadNewImage = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -244,17 +262,15 @@ export default function Home() {
     setZoom(1);
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key === "z") {
-        handleUndo();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [handleUndo]);
+  // Use keyboard shortcuts hook
+  useKeyboardShortcuts({
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    brushSize,
+    onBrushSizeChange: setBrushSize,
+    zoom,
+    onZoomChange: handleZoomChange,
+  });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -275,6 +291,15 @@ export default function Home() {
 
   return (
     <div className="relative w-screen h-screen">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
+
       {image ? (
         <>
           <WarpCanvas
@@ -311,10 +336,18 @@ export default function Home() {
           {/* Top toolbar */}
           <div className="absolute top-6 left-6 flex items-center gap-3">
             <button
+              onClick={handleLoadNewImage}
+              className="p-2 bg-white hover:bg-gray-100 rounded-md shadow-sm border border-gray-200 transition-colors"
+              title="Load new image"
+            >
+              <Upload size={18} className="text-gray-800" />
+            </button>
+            <div className="w-px h-6 bg-gray-300" />
+            <button
               onClick={handleUndo}
               disabled={historyIndex <= 0}
               className="p-2 bg-white hover:bg-gray-100 disabled:bg-gray-200 disabled:opacity-50 rounded-md shadow-sm border border-gray-200 transition-colors"
-              title="Undo"
+              title="Undo (Cmd/Ctrl+Z)"
             >
               <Undo2 size={18} className="text-gray-800" />
             </button>
@@ -322,7 +355,7 @@ export default function Home() {
               onClick={handleRedo}
               disabled={historyIndex >= history.length - 1}
               className="p-2 bg-white hover:bg-gray-100 disabled:bg-gray-200 disabled:opacity-50 rounded-md shadow-sm border border-gray-200 transition-colors"
-              title="Redo"
+              title="Redo (Cmd/Ctrl+Shift+Z)"
             >
               <Redo2 size={18} className="text-gray-800" />
             </button>
@@ -391,7 +424,7 @@ export default function Home() {
                   htmlFor="brush-size"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Size <span className="text-gray-500">({brushSize})</span>
+                  Size <span className="text-gray-500">({brushSize}) [ ]</span>
                 </label>
                 <input
                   id="brush-size"
@@ -452,7 +485,7 @@ export default function Home() {
                 >
                   Zoom{" "}
                   <span className="text-gray-500">
-                    ({(zoom * 100).toFixed(0)}%)
+                    ({(zoom * 100).toFixed(0)}%) + -
                   </span>
                 </label>
                 <input
