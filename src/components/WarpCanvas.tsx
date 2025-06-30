@@ -1,8 +1,13 @@
 import { useTexture } from "@react-three/drei";
-import { Canvas, ThreeEvent, useFrame, useThree } from "@react-three/fiber";
+import {
+  Canvas,
+  type ThreeEvent,
+  useFrame,
+  useThree,
+} from "@react-three/fiber";
 import {
   forwardRef,
-  Ref,
+  type Ref,
   useCallback,
   useEffect,
   useMemo,
@@ -98,11 +103,50 @@ const DISP_RT_PARAMS = {
   colorSpace: THREE.SRGBColorSpace,
 } as const;
 
+// Mobile optimization constants - keep quality high but manage memory better
+const MAX_HISTORY_SIZE = 15; // Consistent history size
+
+// Detect if we're on a mobile device
+const isMobileDevice = () => {
+  return (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent,
+    ) ||
+    (navigator.maxTouchPoints && navigator.maxTouchPoints > 2)
+  );
+};
+
+// Memory management utilities
+const disposeRenderTarget = (rt: THREE.WebGLRenderTarget) => {
+  if (rt) {
+    rt.texture.dispose();
+    rt.dispose();
+  }
+};
+
+const cleanupHistory = (
+  history: THREE.Texture[],
+  maxSize: number = MAX_HISTORY_SIZE,
+  originalState?: THREE.Texture | null,
+) => {
+  if (history.length <= maxSize) return history;
+
+  const toDispose = history.slice(0, history.length - maxSize);
+  toDispose.forEach((texture) => {
+    // Never dispose the original state texture
+    if (texture && texture.dispose && texture !== originalState) {
+      texture.dispose();
+    }
+  });
+
+  return history.slice(history.length - maxSize);
+};
+
 // Function to create HDR file data in Radiance format
 function createHDRFile(
   floatPixels: Float32Array,
   width: number,
-  height: number
+  height: number,
 ): Uint8Array {
   // HDR header
   const header = [
@@ -174,9 +218,8 @@ interface WarpEffectProps {
   onHistoryChange: (history: THREE.Texture[]) => void;
   history: THREE.Texture[];
   historyIndex: number;
-  edgeSoftness?: number;
   onPointerMove?: (
-    pos: { x: number; y: number; diameter: number } | null
+    pos: { x: number; y: number; diameter: number } | null,
   ) => void;
   panX: number;
   panY: number;
@@ -186,9 +229,10 @@ interface WarpEffectProps {
     exportFn: (
       width: number,
       height: number,
-      options?: { hdr?: boolean }
-    ) => HTMLCanvasElement
+      options?: { hdr?: boolean },
+    ) => HTMLCanvasElement,
   ) => void;
+  isComparing?: boolean;
 }
 
 function WarpEffect({
@@ -205,6 +249,7 @@ function WarpEffect({
   onPanChange,
   onZoomChange,
   onExportReady,
+  isComparing,
 }: WarpEffectProps) {
   const [isInitialized, setIsInitialized] = useState(false);
   const { gl, viewport } = useThree();
@@ -228,6 +273,14 @@ function WarpEffect({
   const [isPanning, setIsPanning] = useState(false);
   const [spacePressed, setSpacePressed] = useState(false);
   const [touchDistance, setTouchDistance] = useState(0);
+  const [isTwoFingerGesture, setIsTwoFingerGesture] = useState(false);
+  const [isDragStarted, setIsDragStarted] = useState(false);
+  const [isWarpingDelayed, setIsWarpingDelayed] = useState(false);
+  const lastBrushPreview = useRef<{
+    x: number;
+    y: number;
+    diameter: number;
+  } | null>(null);
   const mouse = useRef(new THREE.Vector2(0, 0));
   const prevMouse = useRef(new THREE.Vector2(0, 0));
   const panStart = useRef(new THREE.Vector2(0, 0));
@@ -235,6 +288,10 @@ function WarpEffect({
   const initialZoom = useRef(1);
   const prevHistoryIndex = useRef(-1);
   const justAddedHistory = useRef(false);
+  const dragStartPos = useRef(new THREE.Vector2(0, 0));
+  const warpDelayTimeout = useRef<number | null>(null);
+  const DRAG_THRESHOLD = 5; // pixels
+  const WARP_DELAY = 80; // milliseconds
 
   const displayMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
 
@@ -247,7 +304,7 @@ function WarpEffect({
 
   const brushMaterial = useMemo(
     () => new THREE.ShaderMaterial({ ...BrushShader }),
-    []
+    [],
   );
   const brushScene = useMemo(() => {
     const s = new THREE.Scene();
@@ -287,35 +344,36 @@ function WarpEffect({
 
   // Frame-buffers matching original image resolution
   const fbosRef = useRef<THREE.WebGLRenderTarget[]>([]);
+  const originalStateRef = useRef<THREE.Texture | null>(null); // Preserve original state
 
   useEffect(() => {
     if (!texture.image) return;
 
-    // Dispose old targets
-    fbosRef.current.forEach((f) => f.dispose());
+    // Dispose old targets properly
+    fbosRef.current.forEach((f) => disposeRenderTarget(f));
 
-    // Clamp to GPU maximum
+    // Use full GPU capabilities - no mobile quality reduction
     const max = gl.capabilities.maxTextureSize;
     let w = (texture.image as HTMLImageElement).width;
     let h = (texture.image as HTMLImageElement).height;
+
+    // Only clamp to GPU maximum, maintain quality
     if (w > max || h > max) {
       const r = Math.min(max / w, max / h);
       w = Math.floor(w * r);
       h = Math.floor(h * r);
     }
 
-    // Improve sampling quality by enabling anisotropic filtering
+    // Use full anisotropic filtering for quality
     const maxAnisotropy = gl.capabilities.getMaxAnisotropy
       ? gl.capabilities.getMaxAnisotropy()
       : 0;
 
-    // Create displacement FBOs for ping-pong rendering
+    // Create displacement FBOs for ping-pong rendering - full quality
     const fbo1 = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
-
     fbo1.texture.anisotropy = maxAnisotropy;
 
     const fbo2 = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
-
     fbo2.texture.anisotropy = maxAnisotropy;
 
     // Clear displacement to zero vector
@@ -326,15 +384,31 @@ function WarpEffect({
     });
     gl.setRenderTarget(null);
 
-    // Update texel size uniform
-    // shaderRef.current.uniforms.uTexelSize.value.set(1 / w, 1 / h);
-
     currentFBOIndex.current = 0;
+
+    // Create and store original state (empty displacement) - NEVER dispose this
+    if (originalStateRef.current) {
+      originalStateRef.current.dispose();
+    }
+    const originalRT = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
+    gl.setRenderTarget(originalRT);
+    gl.clear();
+    gl.setRenderTarget(null);
+    originalStateRef.current = originalRT.texture;
 
     // Set initial displacement uniform on display material
     if (displayMaterialRef.current) {
       displayMaterialRef.current.uniforms.uDisplacement.value =
         fbosRef.current[0].texture;
+    }
+
+    // Force garbage collection on mobile (if available) - but maintain quality
+    if (
+      isMobileDevice() &&
+      "gc" in window &&
+      typeof (window as any).gc === "function"
+    ) {
+      setTimeout(() => (window as any).gc(), 100);
     }
   }, [texture, gl]);
 
@@ -347,7 +421,7 @@ function WarpEffect({
   // Orthographic camera for full-screen quad rendering (FBO copies)
   const orthoCamera = useMemo(
     () => new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
-    []
+    [],
   );
 
   // Update brushMaterial uniform when UI changes
@@ -355,6 +429,35 @@ function WarpEffect({
     brushMaterial.uniforms.uBrushSize.value = brushSize / 200 / zoom;
     brushMaterial.uniforms.uBrushStrength.value = brushStrength / 100;
   }, [brushSize, brushStrength, zoom, brushMaterial]);
+
+  // Function to restore to original state (empty displacement)
+  const restoreToOriginal = useCallback(() => {
+    if (originalStateRef.current && fbosRef.current.length > 0) {
+      // Copy the original state into both FBOs
+      fbosRef.current.forEach((targetFBO) => {
+        const tempScene = new THREE.Scene();
+        const tempQuad = new THREE.Mesh(
+          new THREE.PlaneGeometry(2, 2),
+          new THREE.MeshBasicMaterial({ map: originalStateRef.current }),
+        );
+        tempScene.add(tempQuad);
+
+        gl.setRenderTarget(targetFBO);
+        gl.render(tempScene, orthoCamera);
+        gl.setRenderTarget(null);
+
+        // Clean up temporary objects immediately
+        tempQuad.geometry.dispose();
+        tempQuad.material.dispose();
+      });
+
+      // Update display material displacement uniform
+      if (displayMaterialRef.current) {
+        displayMaterialRef.current.uniforms.uDisplacement.value =
+          fbosRef.current[currentFBOIndex.current].texture;
+      }
+    }
+  }, [gl, orthoCamera]);
 
   // Function to restore displacement from history
   const restoreFromHistory = useCallback(
@@ -372,13 +475,17 @@ function WarpEffect({
           const tempScene = new THREE.Scene();
           const tempQuad = new THREE.Mesh(
             new THREE.PlaneGeometry(2, 2),
-            new THREE.MeshBasicMaterial({ map: displacementToRestore })
+            new THREE.MeshBasicMaterial({ map: displacementToRestore }),
           );
           tempScene.add(tempQuad);
 
           gl.setRenderTarget(targetFBO);
           gl.render(tempScene, orthoCamera);
           gl.setRenderTarget(null);
+
+          // Clean up temporary objects immediately
+          tempQuad.geometry.dispose();
+          tempQuad.material.dispose();
         });
 
         // Update display material displacement uniform to use the currently active FBO
@@ -388,7 +495,7 @@ function WarpEffect({
         }
       }
     },
-    [history, gl, orthoCamera]
+    [history, gl, orthoCamera],
   );
 
   // Restore texture from history when historyIndex changes (undo/redo)
@@ -412,6 +519,48 @@ function WarpEffect({
 
     prevHistoryIndex.current = historyIndex;
   }, [historyIndex, history.length, isWarping, restoreFromHistory]);
+
+  // Handle compare mode - show original vs current
+  useEffect(() => {
+    if (!isComparing) return;
+
+    // When comparing is active, temporarily show original state
+    if (originalStateRef.current && fbosRef.current.length > 0) {
+      fbosRef.current.forEach((targetFBO) => {
+        const tempScene = new THREE.Scene();
+        const tempQuad = new THREE.Mesh(
+          new THREE.PlaneGeometry(2, 2),
+          new THREE.MeshBasicMaterial({ map: originalStateRef.current }),
+        );
+        tempScene.add(tempQuad);
+
+        gl.setRenderTarget(targetFBO);
+        gl.render(tempScene, orthoCamera);
+        gl.setRenderTarget(null);
+
+        // Clean up temporary objects immediately
+        tempQuad.geometry.dispose();
+        tempQuad.material.dispose();
+      });
+
+      // Update display material
+      if (displayMaterialRef.current) {
+        displayMaterialRef.current.uniforms.uDisplacement.value =
+          fbosRef.current[currentFBOIndex.current].texture;
+      }
+    }
+
+    // Cleanup function to restore current state when compare is turned off
+    return () => {
+      if (
+        history.length > 0 &&
+        historyIndex >= 0 &&
+        historyIndex < history.length
+      ) {
+        restoreFromHistory(historyIndex);
+      }
+    };
+  }, [isComparing, gl, orthoCamera, history, historyIndex, restoreFromHistory]);
 
   useEffect(() => {
     if (!texture) return;
@@ -446,45 +595,105 @@ function WarpEffect({
   }, [panX, panY]);
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    // Don't start warping if we're in a two-finger gesture or comparing
+    if (isTwoFingerGesture || isComparing) return;
+
+    // Clear any existing timeout
+    if (warpDelayTimeout.current) {
+      clearTimeout(warpDelayTimeout.current);
+      warpDelayTimeout.current = null;
+    }
+
     if (spacePressed) {
       setIsPanning(true);
       panStart.current.set(e.pointer.x, e.pointer.y);
       initialPan.current.set(panX, panY);
     } else if (!isPanning) {
-      setIsWarping(true);
+      // Store the initial touch position
+      dragStartPos.current.set(e.pointer.x, e.pointer.y);
+      setIsDragStarted(false);
+      setIsWarpingDelayed(false);
       prevMouse.current.copy(mouse.current);
+
+      // For desktop (mouse), start warping immediately on mouse down
+      if (e.pointerType === "mouse") {
+        setIsDragStarted(true);
+        setIsWarping(true);
+        setIsWarpingDelayed(true);
+      }
     }
   };
 
   const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
-    if (isPanning) {
+    if (isPanning && !isTwoFingerGesture) {
       const deltaX = e.pointer.x - panStart.current.x;
       const deltaY = e.pointer.y - panStart.current.y;
       onPanChange(
         initialPan.current.x + deltaX * viewport.width * 0.5,
-        initialPan.current.y + deltaY * viewport.height * 0.5
+        initialPan.current.y + deltaY * viewport.height * 0.5,
       );
+    } else if (
+      !isPanning &&
+      !isTwoFingerGesture &&
+      !spacePressed &&
+      !isComparing &&
+      e.pointerType !== "mouse"
+    ) {
+      // Only apply threshold and delay logic for touch events, not mouse
+      if (!isDragStarted && !isWarping) {
+        const currentPos = new THREE.Vector2(e.pointer.x, e.pointer.y);
+        const distance = dragStartPos.current.distanceTo(currentPos);
+
+        // Convert to screen pixels for threshold calculation
+        const screenDistance =
+          distance * Math.min(window.innerWidth, window.innerHeight) * 0.5;
+
+        if (screenDistance > DRAG_THRESHOLD) {
+          setIsDragStarted(true);
+
+          // Start the delay timer before actually beginning to warp
+          warpDelayTimeout.current = setTimeout(() => {
+            setIsWarping(true);
+            setIsWarpingDelayed(true);
+            warpDelayTimeout.current = null;
+          }, WARP_DELAY);
+        }
+      }
     }
   };
 
   const handlePointerUp = () => {
+    // Clear any pending warp delay
+    if (warpDelayTimeout.current) {
+      clearTimeout(warpDelayTimeout.current);
+      warpDelayTimeout.current = null;
+    }
+
     if (isPanning) {
       setIsPanning(false);
-    } else if (isWarping) {
+    } else if (
+      (isWarping || isWarpingDelayed) &&
+      !isTwoFingerGesture &&
+      !isComparing &&
+      isDragStarted
+    ) {
       setIsWarping(false);
+      setIsDragStarted(false);
+      setIsWarpingDelayed(false);
 
-      // Save current displacement state to history
-      if (fbosRef.current.length > 0) {
+      // Only save to history if we actually started warping (not just delayed)
+      if (isWarpingDelayed && fbosRef.current.length > 0) {
         const currentDisp = fbosRef.current[currentFBOIndex.current];
         const w = currentDisp.width;
         const h = currentDisp.height;
 
         // Create a snapshot of the current displacement
-        const snapshotRT = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
+        const rtParams = DISP_RT_PARAMS;
+        const snapshotRT = new THREE.WebGLRenderTarget(w, h, rtParams);
         const tempScene = new THREE.Scene();
         const tempQuad = new THREE.Mesh(
           new THREE.PlaneGeometry(2, 2),
-          new THREE.MeshBasicMaterial({ map: currentDisp.texture })
+          new THREE.MeshBasicMaterial({ map: currentDisp.texture }),
         );
         tempScene.add(tempQuad);
 
@@ -492,16 +701,30 @@ function WarpEffect({
         gl.render(tempScene, orthoCamera);
         gl.setRenderTarget(null);
 
-        // Add to history
-        const newHistory = [
+        // Clean up temporary objects
+        tempQuad.geometry.dispose();
+        tempQuad.material.dispose();
+
+        // Add to history with size management
+        const currentHistory = [
           ...history.slice(0, historyIndex + 1),
           snapshotRT.texture,
         ];
-        onHistoryChange(newHistory);
+        const cleanedHistory = cleanupHistory(
+          currentHistory,
+          MAX_HISTORY_SIZE,
+          originalStateRef.current,
+        );
+        onHistoryChange(cleanedHistory);
 
         // Mark that we just added history so the upcoming historyIndex change doesn't trigger restoration
         justAddedHistory.current = true;
       }
+    } else {
+      // Reset states if no drag occurred
+      setIsWarping(false);
+      setIsDragStarted(false);
+      setIsWarpingDelayed(false);
     }
   };
 
@@ -529,14 +752,25 @@ function WarpEffect({
     const touch2 = touches[1];
     return Math.sqrt(
       Math.pow(touch2.clientX - touch1.clientX, 2) +
-        Math.pow(touch2.clientY - touch1.clientY, 2)
+        Math.pow(touch2.clientY - touch1.clientY, 2),
     );
   };
 
   const handleTouchStart = (e: TouchEvent) => {
     if (e.touches.length === 2) {
       e.preventDefault();
+      // Clear any pending warp delay
+      if (warpDelayTimeout.current) {
+        clearTimeout(warpDelayTimeout.current);
+        warpDelayTimeout.current = null;
+      }
+
+      setIsTwoFingerGesture(true);
       setIsPanning(true);
+      setIsWarping(false); // Stop any warping immediately
+      setIsDragStarted(false); // Reset drag state
+      setIsWarpingDelayed(false);
+
       const distance = getTouchDistance(e.touches);
       setTouchDistance(distance);
       initialZoom.current = zoom;
@@ -549,11 +783,17 @@ function WarpEffect({
 
       panStart.current.set(normalizedX, normalizedY);
       initialPan.current.set(panX, panY);
+    } else if (e.touches.length === 1) {
+      setIsTwoFingerGesture(false);
+      // Reset drag states for single touch
+      setIsDragStarted(false);
+      setIsWarping(false);
+      setIsWarpingDelayed(false);
     }
   };
 
   const handleTouchMove = (e: TouchEvent) => {
-    if (e.touches.length === 2 && isPanning) {
+    if (e.touches.length === 2 && isPanning && isTwoFingerGesture) {
       e.preventDefault();
 
       // Handle pinch zoom
@@ -575,17 +815,62 @@ function WarpEffect({
       const deltaY = normalizedY - panStart.current.y;
       onPanChange(
         initialPan.current.x + deltaX * viewport.width * 0.5,
-        initialPan.current.y + deltaY * viewport.height * 0.5
+        initialPan.current.y + deltaY * viewport.height * 0.5,
       );
     }
   };
 
   const handleTouchEnd = (e: TouchEvent) => {
     if (e.touches.length < 2) {
+      // Clear any pending warp delay
+      if (warpDelayTimeout.current) {
+        clearTimeout(warpDelayTimeout.current);
+        warpDelayTimeout.current = null;
+      }
+
       setIsPanning(false);
       setTouchDistance(0);
+      setIsTwoFingerGesture(false);
+
+      // Reset drag states when touch ends
+      if (e.touches.length === 0) {
+        setIsDragStarted(false);
+        setIsWarping(false);
+        setIsWarpingDelayed(false);
+      }
     }
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (warpDelayTimeout.current) {
+        clearTimeout(warpDelayTimeout.current);
+      }
+
+      // Cleanup WebGL resources on unmount
+      fbosRef.current.forEach((f) => disposeRenderTarget(f));
+      fbosRef.current = [];
+
+      // Dispose original state on unmount
+      if (originalStateRef.current) {
+        originalStateRef.current.dispose();
+        originalStateRef.current = null;
+      }
+
+      // Clear brush preview reference
+      lastBrushPreview.current = null;
+
+      // Force garbage collection on mobile (if available)
+      if (
+        isMobileDevice() &&
+        "gc" in window &&
+        typeof (window as any).gc === "function"
+      ) {
+        setTimeout(() => (window as any).gc(), 100);
+      }
+    };
+  }, []);
 
   // Add touch event listeners
   useEffect(() => {
@@ -609,6 +894,10 @@ function WarpEffect({
     viewport,
     onZoomChange,
     onPanChange,
+    isTwoFingerGesture,
+    isDragStarted,
+    isWarping,
+    isWarpingDelayed,
   ]);
 
   useFrame(({ pointer, size }) => {
@@ -621,17 +910,47 @@ function WarpEffect({
     const intersects = raycaster.intersectObject(meshRef.current);
     const hit = intersects[0];
 
-    if (onPointerMove && hit) {
+    if (onPointerMove && hit && !isTwoFingerGesture) {
       const worldPoint = hit.point.clone();
       const ndc = worldPoint.project(camera);
       const screenX = (ndc.x * 0.5 + 0.5) * size.width;
       const screenY = (ndc.y * -0.5 + 0.5) * size.height;
       const displayHeightPx = size.height * (scale[1] / viewport.height);
       const diameter = ((brushSize / 200) * displayHeightPx) / zoom;
-      onPointerMove({ x: screenX, y: screenY, diameter });
+
+      // Only update if position changed significantly (reduce re-renders)
+      const newPreview = { x: screenX, y: screenY, diameter };
+      const lastPreview = lastBrushPreview.current;
+
+      if (
+        !lastPreview ||
+        Math.abs(newPreview.x - lastPreview.x) > 2 ||
+        Math.abs(newPreview.y - lastPreview.y) > 2 ||
+        Math.abs(newPreview.diameter - lastPreview.diameter) > 1
+      ) {
+        lastBrushPreview.current = newPreview;
+        onPointerMove(newPreview);
+      }
+    } else if (
+      onPointerMove &&
+      isTwoFingerGesture &&
+      lastBrushPreview.current !== null
+    ) {
+      // Hide brush preview during two-finger gestures (only if not already hidden)
+      lastBrushPreview.current = null;
+      onPointerMove(null);
     }
 
-    if (isWarping && !isPanning && hit) {
+    // Only apply warping if drag has started, delay has completed, and we're actually warping
+    if (
+      isWarping &&
+      isWarpingDelayed &&
+      !isPanning &&
+      !isTwoFingerGesture &&
+      !isComparing &&
+      isDragStarted &&
+      hit
+    ) {
       const currentDisp = fbosRef.current[currentFBOIndex.current];
       const nextDisp = fbosRef.current[(currentFBOIndex.current + 1) % 2];
 
@@ -639,7 +958,7 @@ function WarpEffect({
 
       raycaster.setFromCamera(
         new THREE.Vector2(prevMouse.current.x, prevMouse.current.y),
-        camera
+        camera,
       );
       const prevHit = raycaster.intersectObject(meshRef.current)[0];
       const prevUV = prevHit ? prevHit.uv! : currentUV.clone();
@@ -648,11 +967,11 @@ function WarpEffect({
       brushMaterial.uniforms.uPrevDisp.value = currentDisp.texture;
       brushMaterial.uniforms.uMouse.value = new THREE.Vector2(
         currentUV.x,
-        currentUV.y
+        currentUV.y,
       );
       brushMaterial.uniforms.uPrevMouse.value = new THREE.Vector2(
         prevUV.x,
-        prevUV.y
+        prevUV.y,
       );
       brushMaterial.uniforms.uBrushSize.value = brushSize / 200.0;
       brushMaterial.uniforms.uBrushStrength.value = brushStrength / 100.0;
@@ -680,22 +999,21 @@ function WarpEffect({
   });
 
   useEffect(() => {
-    // If the texture is loaded and history is empty, push a true snapshot as the initial state
-    if (texture && texture.image && history.length === 0) {
-      // Create initial empty displacement snapshot
-      const w = (texture.image as HTMLImageElement).width;
-      const h = (texture.image as HTMLImageElement).height;
-      const snapshotRT = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
-      gl.setRenderTarget(snapshotRT);
-      gl.clear(); // Clear to zero displacement
-      gl.setRenderTarget(null);
-      onHistoryChange([snapshotRT.texture]);
+    // If the texture is loaded and history is empty, push the original state as the initial state
+    if (
+      texture &&
+      texture.image &&
+      history.length === 0 &&
+      originalStateRef.current
+    ) {
+      // Use the original state reference directly - don't create a new texture
+      onHistoryChange([originalStateRef.current]);
 
       // Mark component as initialized after texture is loaded and history is set
       console.log("WarpCanvas component initialized, setting export function");
       setIsInitialized(true);
     }
-  }, [texture, history.length, onHistoryChange, gl, camera]);
+  }, [texture, history.length, onHistoryChange]);
 
   // Export function that renders at specified resolution
   const exportAtResolution = useCallback(
@@ -703,7 +1021,7 @@ function WarpEffect({
       // Prevent export calls during component initialization
       if (!isInitialized) {
         console.warn(
-          "Export function called before component initialization, ignoring"
+          "Export function called before component initialization, ignoring",
         );
         return document.createElement("canvas");
       }
@@ -713,7 +1031,7 @@ function WarpEffect({
         // Check if it's an empty object (common in React dev mode)
         if (args[0] && Object.keys(args[0]).length === 0) {
           console.warn(
-            "Export function called with empty object, likely React dev mode issue. Ignoring."
+            "Export function called with empty object, likely React dev mode issue. Ignoring.",
           );
           return document.createElement("canvas");
         }
@@ -727,7 +1045,7 @@ function WarpEffect({
           {
             arg: args[0],
             stackTrace: new Error().stack,
-          }
+          },
         );
         return document.createElement("canvas");
       }
@@ -739,7 +1057,7 @@ function WarpEffect({
             args,
             argsLength: args.length,
             stackTrace: new Error().stack,
-          }
+          },
         );
         return document.createElement("canvas");
       }
@@ -747,7 +1065,7 @@ function WarpEffect({
       const [width, height, options] = args as [
         number,
         number,
-        { hdr?: boolean }?
+        { hdr?: boolean }?,
       ];
 
       // Additional validation after type assertion
@@ -760,7 +1078,7 @@ function WarpEffect({
             widthType: typeof width,
             heightType: typeof height,
             stackTrace: new Error().stack,
-          }
+          },
         );
         return document.createElement("canvas");
       }
@@ -839,7 +1157,7 @@ function WarpEffect({
         if (exportMaterial.fragmentShader?.includes("pow(color.rgb")) {
           exportMaterial.fragmentShader = exportMaterial.fragmentShader.replace(
             /color\.rgb\s*=\s*pow\(color\.rgb,[^;]+;/,
-            "// HDR: gamma correction removed for linear output"
+            "// HDR: gamma correction removed for linear output",
           );
         }
 
@@ -848,7 +1166,7 @@ function WarpEffect({
           /vec4 color = texture2D\(uTexture, uv\);/,
           `vec4 color = texture2D(uTexture, uv);
            // Convert sRGB to linear for HDR
-           color.rgb = pow(color.rgb, vec3(2.2));`
+           color.rgb = pow(color.rgb, vec3(2.2));`,
         );
 
         exportMaterial.needsUpdate = true;
@@ -857,7 +1175,7 @@ function WarpEffect({
         if (exportMaterial.fragmentShader?.includes("pow(color.rgb")) {
           exportMaterial.fragmentShader = exportMaterial.fragmentShader.replace(
             /color\.rgb\s*=\s*pow\(color\.rgb,[^;]+;/,
-            "// LDR: gamma correction removed to avoid double encoding"
+            "// LDR: gamma correction removed to avoid double encoding",
           );
           exportMaterial.needsUpdate = true;
         }
@@ -870,7 +1188,7 @@ function WarpEffect({
       }
       const exportQuad = new THREE.Mesh(
         new THREE.PlaneGeometry(2, 2),
-        exportMaterial
+        exportMaterial,
       );
       exportScene.add(exportQuad);
 
@@ -939,7 +1257,7 @@ function WarpEffect({
         const imageData = new ImageData(
           new Uint8ClampedArray(pixels),
           width,
-          height
+          height,
         );
         exportCtx.putImageData(imageData, 0, 0);
 
@@ -966,7 +1284,7 @@ function WarpEffect({
       fbosRef,
       currentFBOIndex,
       isInitialized,
-    ]
+    ],
   );
 
   // Pass export function to parent
@@ -991,7 +1309,19 @@ function WarpEffect({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerOut={() => {
+        // Clear any pending warp delay
+        if (warpDelayTimeout.current) {
+          clearTimeout(warpDelayTimeout.current);
+          warpDelayTimeout.current = null;
+        }
+
+        // Clear brush preview reference
+        lastBrushPreview.current = null;
+
         handlePointerUp();
+        setIsDragStarted(false);
+        setIsWarping(false);
+        setIsWarpingDelayed(false);
         if (onPointerMove) onPointerMove(null);
       }}
       onWheel={handleWheel}
@@ -1004,7 +1334,7 @@ function WarpEffect({
 
 type WarpCanvasProps = WarpEffectProps;
 
-const WarpCanvas = forwardRef<HTMLCanvasElement, WarpCanvasProps>(
+export const WarpCanvas = forwardRef<HTMLCanvasElement, WarpCanvasProps>(
   function WarpCanvas(
     {
       image,
@@ -1020,8 +1350,9 @@ const WarpCanvas = forwardRef<HTMLCanvasElement, WarpCanvasProps>(
       onPanChange,
       onZoomChange,
       onExportReady,
+      isComparing,
     },
-    ref
+    ref,
   ) {
     return (
       <Canvas
@@ -1042,12 +1373,9 @@ const WarpCanvas = forwardRef<HTMLCanvasElement, WarpCanvasProps>(
           onPanChange={onPanChange}
           onZoomChange={onZoomChange}
           onExportReady={onExportReady}
+          isComparing={isComparing}
         />
       </Canvas>
     );
-  }
+  },
 );
-
-WarpCanvas.displayName = "WarpCanvas";
-
-export default WarpCanvas;

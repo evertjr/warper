@@ -73,5 +73,5 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onUndo, onRedo, brushSize, onBrushSizeChange, zoom, onZoomChange]);
+  }, [onUndo, onRedo, brushSize, onBrushSizeChange, onZoomChange, zoom]);
 }
