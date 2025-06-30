@@ -381,6 +381,12 @@ function WarpEffect({
 
   useEffect(() => {
     if (!texture) return;
+    console.log("Setting up texture color space:", {
+      colorSpace: texture.colorSpace,
+      format: texture.format,
+      type: texture.type,
+      flipY: texture.flipY,
+    });
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
@@ -393,6 +399,10 @@ function WarpEffect({
     texture.anisotropy = maxAnisotropy;
 
     texture.needsUpdate = true;
+    console.log("Texture setup complete:", {
+      colorSpace: texture.colorSpace,
+      anisotropy: texture.anisotropy,
+    });
   }, [texture]);
 
   const scale = useMemo<[number, number, number]>(() => {
@@ -961,7 +971,8 @@ function WarpEffect({
         magFilter: THREE.LinearFilter,
         format: THREE.RGBAFormat,
         type: isHDR ? THREE.FloatType : THREE.UnsignedByteType,
-        colorSpace: THREE.LinearSRGBColorSpace,
+        // Use sRGB color space for standard export so renderer performs gamma encoding
+        colorSpace: isHDR ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace,
       });
 
       // Create temporary scene with display material
@@ -984,12 +995,6 @@ function WarpEffect({
           }
         `;
         exportMaterial.needsUpdate = true;
-      } else {
-        // LDR: No extra modifications needed. The cloned material already contains
-        // pow(color.rgb, vec3(0.8/2.2)) from the live preview shader. Since we are
-        // rendering into a LinearSRGBColorSpace render target, no additional sRGB
-        // conversion will be applied, resulting in a single encoding step that
-        // matches the on-screen preview.
       }
 
       // Ensure the cloned material has the current displacement
@@ -1168,7 +1173,9 @@ export const WarpCanvas = forwardRef<HTMLCanvasElement, WarpCanvasProps>(
     return (
       <Canvas
         ref={ref as Ref<HTMLCanvasElement>}
-        gl={{ preserveDrawingBuffer: true }}
+        gl={{
+          preserveDrawingBuffer: true,
+        }}
       >
         <WarpEffect
           image={image}

@@ -26,6 +26,8 @@ import {
 } from "react-aria-components";
 import * as THREE from "three";
 import { WarpCanvas } from "./canvas/WarpCanvas";
+import { InstallPrompt } from "./components/InstallPrompt";
+import { OfflineIndicator } from "./components/OfflineIndicator";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import {
   downloadCanvasWithExif,
@@ -70,6 +72,7 @@ export default function App() {
   const historyIndexRef = useRef(-1);
   const [isComparing, setIsComparing] = useState(false);
   const [exifData, setExifData] = useState<ExifData | null>(null);
+  const [hasWideGamutProfile, setHasWideGamutProfile] = useState(false);
 
   // Update refs when state changes
   useEffect(() => {
@@ -138,6 +141,33 @@ export default function App() {
     const extractedExifData = await extractExifData(file);
     setExifData(extractedExifData);
 
+    // Check if image has a wide gamut color profile
+    const hasIccProfile = !!(
+      extractedExifData?.iccProfile &&
+      extractedExifData.iccProfile.byteLength > 0
+    );
+    const colorSpace = extractedExifData?.ColorSpace;
+    const whitePoint = extractedExifData?.WhitePoint;
+    const colorSpaceData = extractedExifData?.ColorSpaceData;
+
+    console.log("Color space analysis:", {
+      hasIccProfile,
+      colorSpace,
+      whitePoint,
+      colorSpaceData,
+      iccProfileSize: extractedExifData?.iccProfile?.byteLength || 0,
+    });
+
+    // Detect wide gamut profiles
+    const isWideGamut =
+      hasIccProfile ||
+      colorSpace === "Adobe RGB" ||
+      colorSpace === "ProPhoto RGB" ||
+      colorSpace === 65535; // Uncalibrated color space often indicates wide gamut
+
+    setHasWideGamutProfile(isWideGamut);
+    console.log("Wide gamut detection result:", isWideGamut);
+
     const isHeif =
       /heic|heif/i.test(file.type) || /\.heic$|\.heif$/i.test(file.name);
 
@@ -154,7 +184,61 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = (e) => {
         if (e.target && typeof e.target.result === "string") {
-          setImage(e.target.result);
+          // Load image through 2D canvas to ensure proper color profile handling
+          const img = new Image();
+          img.onload = () => {
+            // Create a canvas to apply color profile conversion
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d", {
+              colorSpace: "srgb", // Ensure sRGB output
+            });
+
+            if (!ctx) {
+              console.warn("Failed to create 2D context, using original image");
+              setImage(e.target?.result as string);
+              return;
+            }
+
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            // Draw image - browser will handle ICC profile conversion to sRGB
+            ctx.drawImage(img, 0, 0);
+
+            // Convert back to data URL in sRGB color space
+            const srgbDataUrl = canvas.toDataURL("image/png", 1.0);
+            setImage(srgbDataUrl);
+
+            console.log("Image converted to sRGB color space for WebGL");
+
+            // Get original image dimensions
+            setOriginalImageData({
+              width: img.width,
+              height: img.height,
+              format: file.type || "image/png",
+            });
+          };
+
+          img.onerror = () => {
+            console.warn(
+              "Failed to load image for color conversion, using original",
+            );
+            setImage(e.target?.result as string);
+
+            // Fallback: Get dimensions from original image
+            const fallbackImg = new Image();
+            fallbackImg.onload = () => {
+              setOriginalImageData({
+                width: fallbackImg.width,
+                height: fallbackImg.height,
+                format: file.type || "image/png",
+              });
+            };
+            fallbackImg.src = e.target?.result as string;
+          };
+
+          img.src = e.target?.result as string;
+
           // Reset state when loading new image
           setHistory([]);
           setHistoryIndex(-1);
@@ -163,18 +247,6 @@ export default function App() {
           setZoom(1);
           setExportFunction(null);
           setIsImageLoaded(false);
-          // Note: EXIF data is preserved from the extraction above
-
-          // Get original image dimensions
-          const img = new Image();
-          img.onload = () => {
-            setOriginalImageData({
-              width: img.width,
-              height: img.height,
-              format: file.type || "image/png",
-            });
-          };
-          img.src = e.target.result;
         }
       };
       reader.readAsDataURL(blob);
@@ -406,7 +478,7 @@ export default function App() {
 
   return (
     <div
-      className="relative w-screen h-svh touch-none select-none"
+      className="relative bg-[#0E0E0E] w-screen h-svh touch-none select-none"
       style={{
         userSelect: "none",
         WebkitUserSelect: "none",
@@ -416,6 +488,9 @@ export default function App() {
         WebkitTapHighlightColor: "transparent",
       }}
     >
+      <InstallPrompt />
+      <OfflineIndicator />
+
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -445,6 +520,36 @@ export default function App() {
             isComparing={isComparing}
           />
           {brushPreviewComponent}
+
+          {/* Professional Metadata Overlay */}
+          {originalImageData && (
+            <div className="absolute top-4 left-4 text-xs text-white/80 font-mono leading-relaxed pointer-events-none select-none">
+              <div className="bg-black/20 backdrop-blur-sm rounded px-2 py-1">
+                <div>
+                  {originalImageData.width} × {originalImageData.height}
+                </div>
+                {hasWideGamutProfile && (
+                  <div className="text-yellow-300/90">
+                    {exifData?.ColorSpace === 65535
+                      ? "Wide Gamut"
+                      : exifData?.ColorSpace === "Adobe RGB"
+                        ? "Adobe RGB"
+                        : exifData?.ColorSpace === "ProPhoto RGB"
+                          ? "ProPhoto RGB"
+                          : "Wide Gamut"}
+                  </div>
+                )}
+                {!hasWideGamutProfile && (
+                  <div className="text-green-300/90">sRGB</div>
+                )}
+                {originalFile && (
+                  <div className="text-white/60">
+                    {(originalFile.size / 1024 / 1024).toFixed(1)}MB
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Bottom toolbar */}
           <div

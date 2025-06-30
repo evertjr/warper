@@ -8,7 +8,7 @@ export const DISP_RT_PARAMS = {
   type: THREE.HalfFloatType,
   depthBuffer: false,
   stencilBuffer: false,
-  colorSpace: THREE.SRGBColorSpace,
+  colorSpace: THREE.LinearSRGBColorSpace,
 } as const;
 
 // Mobile optimization constants - keep quality high but manage memory better

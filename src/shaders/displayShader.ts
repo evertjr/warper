@@ -7,7 +7,7 @@ export const DisplayShader = {
     uDisplacement: { value: null },
     uExposure: { value: 1.0 },
     uBlackPoint: { value: 0.0 }, // 0-0.1 typical
-    uWhitePoint: { value: 10.0 }, // <1.0 compress highlights
+    uWhitePoint: { value: 1000.0 }, // A very large value effectively disables Reinhard tone-mapping
     uTint: { value: new THREE.Vector3(1.0, 1.0, 1.0) }, // per-channel multiplier
   },
   vertexShader: `
@@ -18,6 +18,7 @@ export const DisplayShader = {
     }
   `,
   fragmentShader: `
+    #include <common>
     uniform sampler2D uTexture;
     uniform sampler2D uDisplacement;
     uniform float uExposure;
@@ -41,17 +42,16 @@ export const DisplayShader = {
       color = max(color - vec3(uBlackPoint), 0.0);
 
       // White-point / highlight compression (Reinhard-style)
-      //   uWhitePoint < 1.0  -> compress highlights
-      //   uWhitePoint = 1.0  -> neutral (no change)
+      // A large uWhitePoint value effectively disables this effect.
       color = color / (vec3(1.0) + color / vec3(max(uWhitePoint, 1e-4)));
 
       // Apply tint to counter any color cast
       color *= uTint;
 
-      // Gamma encode to sRGB
-      color = pow( color, vec3(1.0/2.2) );
+      gl_FragColor = vec4(color, 1.0);
 
-      gl_FragColor = vec4( color, 1.0 );
+      // Let Three.js handle conversion from linear to the output colorspace (sRGB)
+      #include <colorspace_fragment>
     }
   `,
 };
