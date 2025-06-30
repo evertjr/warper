@@ -969,23 +969,20 @@ function WarpEffect({
       const exportMaterial = displayMaterial.clone();
 
       if (isHDR) {
-        // For HDR export, we need linear color values
-        // First, remove any existing gamma correction
-        if (exportMaterial.fragmentShader?.includes("pow(color.rgb")) {
-          exportMaterial.fragmentShader = exportMaterial.fragmentShader.replace(
-            /color\.rgb\s*=\s*pow\(color\.rgb,[^;]+;/,
-            "// HDR: gamma correction removed for linear output",
-          );
-        }
-
-        // Add sRGB to linear conversion since texture is in sRGB
-        exportMaterial.fragmentShader = exportMaterial.fragmentShader.replace(
-          /vec4 color = texture2D\(uTexture, uv\);/,
-          `vec4 color = texture2D(uTexture, uv);
-           // Convert sRGB to linear for HDR
-           color.rgb = pow(color.rgb, vec3(0.8/2.2));`,
-        );
-
+        // For HDR export, strip all display adjustments and get raw linear data
+        exportMaterial.fragmentShader = `
+          uniform sampler2D uTexture;
+          uniform sampler2D uDisplacement;
+          varying vec2 vUv;
+          
+          void main() {
+            vec2 disp = texture2D(uDisplacement, vUv).rg;
+            vec2 sampleUv = vUv - disp;
+            // Get raw linear color data without any tone-mapping
+            vec3 color = texture2D(uTexture, sampleUv).rgb;
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `;
         exportMaterial.needsUpdate = true;
       } else {
         // LDR: No extra modifications needed. The cloned material already contains
