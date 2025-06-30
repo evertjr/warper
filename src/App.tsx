@@ -25,7 +25,7 @@ import {
   SliderTrack,
 } from "react-aria-components";
 import * as THREE from "three";
-import { WarpCanvas } from "./components/WarpCanvas";
+import { WarpCanvas } from "./canvas/WarpCanvas";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 export type HistoryItem = THREE.Texture;
