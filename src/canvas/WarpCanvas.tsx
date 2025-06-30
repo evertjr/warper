@@ -961,7 +961,7 @@ function WarpEffect({
         magFilter: THREE.LinearFilter,
         format: THREE.RGBAFormat,
         type: isHDR ? THREE.FloatType : THREE.UnsignedByteType,
-        colorSpace: isHDR ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace,
+        colorSpace: THREE.LinearSRGBColorSpace,
       });
 
       // Create temporary scene with display material
@@ -983,19 +983,16 @@ function WarpEffect({
           /vec4 color = texture2D\(uTexture, uv\);/,
           `vec4 color = texture2D(uTexture, uv);
            // Convert sRGB to linear for HDR
-           color.rgb = pow(color.rgb, vec3(2.2));`,
+           color.rgb = pow(color.rgb, vec3(0.8/2.2));`,
         );
 
         exportMaterial.needsUpdate = true;
       } else {
-        // For LDR export, remove gamma correction because the render target is in sRGB
-        if (exportMaterial.fragmentShader?.includes("pow(color.rgb")) {
-          exportMaterial.fragmentShader = exportMaterial.fragmentShader.replace(
-            /color\.rgb\s*=\s*pow\(color\.rgb,[^;]+;/,
-            "// LDR: gamma correction removed to avoid double encoding",
-          );
-          exportMaterial.needsUpdate = true;
-        }
+        // LDR: No extra modifications needed. The cloned material already contains
+        // pow(color.rgb, vec3(0.8/2.2)) from the live preview shader. Since we are
+        // rendering into a LinearSRGBColorSpace render target, no additional sRGB
+        // conversion will be applied, resulting in a single encoding step that
+        // matches the on-screen preview.
       }
 
       // Ensure the cloned material has the current displacement

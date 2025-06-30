@@ -27,6 +27,11 @@ import {
 import * as THREE from "three";
 import { WarpCanvas } from "./canvas/WarpCanvas";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import {
+  downloadCanvasWithExif,
+  extractExifData,
+  type ExifData,
+} from "./utils/exif";
 
 export type HistoryItem = THREE.Texture;
 
@@ -64,6 +69,7 @@ export default function App() {
   const historyRef = useRef<HistoryItem[]>([]);
   const historyIndexRef = useRef(-1);
   const [isComparing, setIsComparing] = useState(false);
+  const [exifData, setExifData] = useState<ExifData | null>(null);
 
   // Update refs when state changes
   useEffect(() => {
@@ -128,6 +134,10 @@ export default function App() {
     const file = event.target.files[0];
     setOriginalFile(file);
 
+    // Extract EXIF data from the original file (before any conversion)
+    const extractedExifData = await extractExifData(file);
+    setExifData(extractedExifData);
+
     const isHeif =
       /heic|heif/i.test(file.type) || /\.heic$|\.heif$/i.test(file.name);
 
@@ -153,6 +163,7 @@ export default function App() {
           setZoom(1);
           setExportFunction(null);
           setIsImageLoaded(false);
+          // Note: EXIF data is preserved from the extraction above
 
           // Get original image dimensions
           const img = new Image();
@@ -179,7 +190,7 @@ export default function App() {
     }
   };
 
-  const handleExportInternal = (hdr = false) => {
+  const handleExportInternal = async (hdr = false) => {
     console.log("handleExport called, exportFunction:", {
       exportFunction,
       type: typeof exportFunction,
@@ -264,10 +275,14 @@ export default function App() {
     }
 
     try {
-      const link = document.createElement("a");
-      link.download = `${filename}.${extension}`;
-      link.href = exportCanvas.toDataURL(mimeType, quality);
-      link.click();
+      // Use the new EXIF-preserving export function
+      await downloadCanvasWithExif(
+        exportCanvas,
+        `${filename}.${extension}`,
+        mimeType,
+        quality,
+        exifData,
+      );
     } catch (error) {
       console.error("Export failed:", error);
       alert(
@@ -276,8 +291,8 @@ export default function App() {
     }
   };
 
-  const handleExport = () => handleExportInternal(false);
-  const handleExportHDR = () => handleExportInternal(true);
+  const handleExport = async () => await handleExportInternal(false);
+  const handleExportHDR = async () => await handleExportInternal(true);
 
   const handleUndo = useCallback(() => {
     setHistoryIndex((idx) => {
