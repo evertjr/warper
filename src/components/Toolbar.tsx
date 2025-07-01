@@ -71,14 +71,28 @@ export function Toolbar() {
       >
         <Redo2 size={14} />
       </Button>
-      <Button
-        onPress={handleRestoreAll}
-        isDisabled={historyIndex <= 0}
-        className="p-1.5 hover:bg-gray-800 focus:bg-gray-700 disabled:opacity-30 text-gray-300 hover:text-yellow-400 disabled:hover:text-gray-300 transition-colors focus:outline-none"
-        aria-label="Reset"
-      >
-        <RotateCcw size={14} />
-      </Button>
+      <MenuTrigger>
+        <Button
+          isDisabled={historyIndex <= 0}
+          className="p-1.5 hover:bg-gray-800 focus:bg-gray-700 disabled:opacity-30 text-gray-300 hover:text-yellow-400 disabled:hover:text-gray-300 transition-colors focus:outline-none"
+          aria-label="Reset"
+        >
+          <RotateCcw size={14} />
+        </Button>
+        <Popover className="bg-black border border-gray-700 min-w-[180px] z-50 font-mono">
+          <Menu className="outline-none p-1">
+            <MenuItem
+              onAction={handleRestoreAll}
+              className="px-2 py-2 text-xs cursor-pointer outline-none"
+            >
+              <div className="text-red-400 hover:text-red-300">
+                CONFIRM REVERT ALL
+              </div>
+              <div className="text-gray-500 mt-1">Remove all changes</div>
+            </MenuItem>
+          </Menu>
+        </Popover>
+      </MenuTrigger>
       <Button
         onPress={handleCompareToggle}
         isDisabled={historyIndex <= 0}
