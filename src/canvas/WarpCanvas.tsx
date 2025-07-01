@@ -1103,18 +1103,15 @@ function WarpEffect({
     ],
   );
 
+  const exportFnSent = useRef(false);
+
   // Pass export function to parent
   useEffect(() => {
-    console.log("Export function useEffect triggered:", {
-      onExportReady: !!onExportReady,
-      isInitialized,
-      exportAtResolution: !!exportAtResolution,
-    });
-    if (onExportReady && isInitialized) {
-      console.log("Passing export function to parent");
+    if (!exportFnSent.current && onExportReady && isInitialized) {
       onExportReady(exportAtResolution);
+      exportFnSent.current = true;
     }
-  }, [onExportReady, exportAtResolution, isInitialized]);
+  }, [onExportReady, isInitialized, exportAtResolution]);
 
   return (
     <mesh
