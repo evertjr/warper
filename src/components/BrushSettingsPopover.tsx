@@ -24,7 +24,7 @@ export function BrushSettingsPopover() {
 
   return (
     <div
-      className="absolute top-6 right-6 select-none"
+      className="absolute top-4 right-4 select-none font-mono"
       style={{
         userSelect: "none",
         WebkitUserSelect: "none",
@@ -36,50 +36,48 @@ export function BrushSettingsPopover() {
     >
       <DialogTrigger>
         <Button
-          className="p-3 bg-white/90 backdrop-blur-sm hover:bg-white focus:bg-white rounded-full shadow-lg border border-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="p-2 bg-black/90 backdrop-blur-sm hover:bg-gray-900 focus:bg-gray-800 border border-gray-700 text-gray-300 hover:text-yellow-400 transition-colors focus:outline-none"
           aria-label="Brush settings"
         >
-          <Brush size={20} className="text-gray-700" />
+          <Brush size={16} />
         </Button>
-        <Popover className="bg-white rounded-lg shadow-lg border border-gray-200 p-4 w-64 z-50 data-[entering]:animate-in data-[entering]:fade-in-0 data-[entering]:zoom-in-95 data-[exiting]:animate-out data-[exiting]:fade-out-0 data-[exiting]:zoom-out-95">
+        <Popover className="bg-black border border-gray-700 p-3 w-48 z-50 font-mono">
           <OverlayArrow>
             <svg
               width={12}
               height={12}
               viewBox="0 0 12 12"
-              className="block fill-white stroke-gray-200 stroke-1 drop-shadow-md"
+              className="block fill-black stroke-gray-700 stroke-1"
             >
               <path d="M0 0 L6 6 L12 0" />
             </svg>
           </OverlayArrow>
           <Dialog className="outline-none">
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <h3 className="font-medium text-gray-900 mb-4">
-                  Brush Settings
+                <h3 className="text-xs text-yellow-400 mb-3 tracking-wider">
+                  BRUSH
                 </h3>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
                   <Slider
                     value={brushSize}
                     onChange={setBrushSize}
                     minValue={1}
                     maxValue={200}
-                    className="flex flex-col gap-2"
+                    className="flex flex-col gap-1"
                     aria-label="Brush size"
                   >
-                    <div className="flex justify-between text-sm">
-                      <label className="font-medium text-gray-700">
-                        Size <span className="text-gray-500">[ ]</span>
-                      </label>
-                      <SliderOutput className="text-gray-500 font-mono">
+                    <div className="flex justify-between text-xs">
+                      <label className="text-gray-300">SIZE</label>
+                      <SliderOutput className="text-yellow-400">
                         {({ state }) => `${state.getThumbValue(0)}`}
                       </SliderOutput>
                     </div>
-                    <SliderTrack className="relative w-full h-2 bg-gray-200 rounded-lg">
-                      <SliderThumb className="w-4 h-4 mt-1 bg-white border-2 border-gray-400 rounded-full focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dragging:bg-gray-50 transition-colors" />
+                    <SliderTrack className="relative w-full h-1 bg-gray-800">
+                      <SliderThumb className="w-3 h-3 mt-0.5 bg-yellow-400 border border-gray-600 focus:border-yellow-300 focus:outline-none transition-colors" />
                     </SliderTrack>
                   </Slider>
                 </div>
@@ -90,19 +88,17 @@ export function BrushSettingsPopover() {
                     onChange={setBrushStrength}
                     minValue={1}
                     maxValue={100}
-                    className="flex flex-col gap-2"
+                    className="flex flex-col gap-1"
                     aria-label="Brush strength"
                   >
-                    <div className="flex justify-between text-sm">
-                      <label className="font-medium text-gray-700">
-                        Strength
-                      </label>
-                      <SliderOutput className="text-gray-500 font-mono">
+                    <div className="flex justify-between text-xs">
+                      <label className="text-gray-300">STRENGTH</label>
+                      <SliderOutput className="text-yellow-400">
                         {({ state }) => `${state.getThumbValue(0)}`}
                       </SliderOutput>
                     </div>
-                    <SliderTrack className="relative w-full h-2 bg-gray-200 rounded-lg">
-                      <SliderThumb className="w-4 h-4 mt-1 bg-white border-2 border-gray-400 rounded-full focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dragging:bg-gray-50 transition-colors" />
+                    <SliderTrack className="relative w-full h-1 bg-gray-800">
+                      <SliderThumb className="w-3 h-3 mt-0.5 bg-yellow-400 border border-gray-600 focus:border-yellow-300 focus:outline-none transition-colors" />
                     </SliderTrack>
                   </Slider>
                 </div>
@@ -114,21 +110,19 @@ export function BrushSettingsPopover() {
                     minValue={1}
                     maxValue={5}
                     step={0.1}
-                    className="flex flex-col gap-2"
+                    className="flex flex-col gap-1"
                     aria-label="Zoom level"
                   >
-                    <div className="flex justify-between text-sm">
-                      <label className="font-medium text-gray-700">
-                        Zoom <span className="text-gray-500">+ -</span>
-                      </label>
-                      <SliderOutput className="text-gray-500 font-mono">
+                    <div className="flex justify-between text-xs">
+                      <label className="text-gray-300">ZOOM</label>
+                      <SliderOutput className="text-yellow-400">
                         {({ state }) =>
                           `${Math.round(state.getThumbValue(0) * 100)}%`
                         }
                       </SliderOutput>
                     </div>
-                    <SliderTrack className="relative w-full h-2 bg-gray-200 rounded-lg">
-                      <SliderThumb className="w-4 h-4 mt-1 bg-white border-2 border-gray-400 rounded-full focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dragging:bg-gray-50 transition-colors" />
+                    <SliderTrack className="relative w-full h-1 bg-gray-800">
+                      <SliderThumb className="w-3 h-3 mt-0.5 bg-yellow-400 border border-gray-600 focus:border-yellow-300 focus:outline-none transition-colors" />
                     </SliderTrack>
                   </Slider>
                 </div>

@@ -35,25 +35,23 @@ export function OfflineIndicator() {
   if (!showIndicator) return null;
 
   return (
-    <div
-      className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-300`}
-    >
+    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-300 font-mono">
       <div
-        className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium shadow-lg ${
+        className={`flex items-center gap-2 px-2 py-1 text-xs border ${
           isOnline
-            ? "bg-green-100 text-green-800 border border-green-200"
-            : "bg-red-100 text-red-800 border border-red-200"
+            ? "bg-black/90 text-yellow-400 border-yellow-400"
+            : "bg-black/90 text-red-400 border-red-400"
         }`}
       >
         {isOnline ? (
           <>
-            <Wifi size={16} />
-            <span>Back online</span>
+            <Wifi size={12} />
+            <span className="tracking-wider">ONLINE</span>
           </>
         ) : (
           <>
-            <WifiOff size={16} />
-            <span>Offline mode</span>
+            <WifiOff size={12} />
+            <span className="tracking-wider">OFFLINE</span>
           </>
         )}
       </div>

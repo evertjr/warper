@@ -42,7 +42,7 @@ function AppContent() {
           top: brushPreview.y - brushPreview.diameter / 2,
           width: brushPreview.diameter,
           height: brushPreview.diameter,
-          border: "1px solid white",
+          border: "1px solid #facc15",
           borderRadius: "50%",
           pointerEvents: "none",
           userSelect: "none",
@@ -58,7 +58,7 @@ function AppContent() {
 
   return (
     <div
-      className="relative bg-[#0E0E0E] w-screen h-svh touch-none select-none"
+      className="relative bg-black w-screen h-svh touch-none select-none font-mono"
       style={{
         userSelect: "none",
         WebkitUserSelect: "none",
@@ -95,11 +95,12 @@ function AppContent() {
           <BrushSettingsPopover />
         </>
       ) : (
-        <div className="flex flex-col items-center justify-center h-full bg-gray-50">
-          <div className="text-center">
-            <h1 className="text-5xl font-light text-gray-900 mb-2">Warper</h1>
-            <p className="text-gray-600 mb-8">
-              Transform your images with precision
+        <div className="flex flex-col items-center justify-center h-full bg-black">
+          <div className="text-center flex flex-col items-center">
+            <img src="/icon-192.png" alt="Warper" className="w-16 h-16 mb-6" />
+            <h1 className="text-2xl font-mono text-white mb-1">WARPER</h1>
+            <p className="text-gray-400 text-xs font-mono mb-8 tracking-wider">
+              IMAGE DISPLACEMENT TOOL
             </p>
             <button
               onClick={() => {
@@ -109,9 +110,9 @@ function AppContent() {
                   );
                 if (input) input.click();
               }}
-              className="inline-flex items-center px-6 py-3 border border-gray-300 rounded-lg shadow-sm bg-white hover:bg-gray-50 focus:bg-gray-100 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="px-4 py-2 border border-gray-600 bg-black hover:bg-gray-900 text-white font-mono text-xs tracking-wider transition-colors focus:outline-none focus:border-yellow-400"
             >
-              <span className="text-gray-700 font-medium">Choose Image</span>
+              LOAD IMAGE
             </button>
           </div>
         </div>

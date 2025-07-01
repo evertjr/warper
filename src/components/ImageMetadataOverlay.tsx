@@ -4,30 +4,37 @@ export function ImageMetadataOverlay() {
   const { originalImageData, hasWideGamutProfile, exifData, originalFile } =
     useWarperContext();
   if (!originalImageData) return null;
+
   return (
-    <div className="absolute top-4 left-4 text-xs text-white/80 font-mono leading-relaxed pointer-events-none select-none">
-      <div className="bg-black/20 backdrop-blur-sm rounded px-2 py-1">
-        <div>
-          {originalImageData.width} × {originalImageData.height}
+    <>
+      {/* Top left - Image info */}
+      <div className="absolute top-4 left-4 text-xs text-white font-mono leading-tight pointer-events-none select-none">
+        <div className="bg-black/40 backdrop-blur-sm px-2 py-1 border border-gray-700">
+          <div className="text-yellow-400">
+            {originalImageData.width} × {originalImageData.height}
+          </div>
+          <div className="text-gray-300">
+            {hasWideGamutProfile ? (
+              <span className="text-yellow-400">
+                {exifData?.ColorSpace === 65535
+                  ? "WIDE GAMUT"
+                  : exifData?.ColorSpace === "Adobe RGB"
+                    ? "ADOBE"
+                    : exifData?.ColorSpace === "ProPhoto RGB"
+                      ? "PROPHOTO"
+                      : "WIDE GAMUT"}
+              </span>
+            ) : (
+              "sRGB"
+            )}
+          </div>
+          {originalFile && (
+            <div className="text-gray-400">
+              {(originalFile.size / 1024 / 1024).toFixed(1)}MB
+            </div>
+          )}
         </div>
-        {hasWideGamutProfile && (
-          <div className="text-yellow-300/90">
-            {exifData?.ColorSpace === 65535
-              ? "Wide Gamut"
-              : exifData?.ColorSpace === "Adobe RGB"
-                ? "Adobe RGB"
-                : exifData?.ColorSpace === "ProPhoto RGB"
-                  ? "ProPhoto RGB"
-                  : "Wide Gamut"}
-          </div>
-        )}
-        {!hasWideGamutProfile && <div className="text-green-300/90">sRGB</div>}
-        {originalFile && (
-          <div className="text-white/60">
-            {(originalFile.size / 1024 / 1024).toFixed(1)}MB
-          </div>
-        )}
       </div>
-    </div>
+    </>
   );
 }

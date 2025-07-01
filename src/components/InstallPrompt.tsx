@@ -91,43 +91,43 @@ export function InstallPrompt() {
   }
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-6 md:max-w-sm z-50">
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <Download size={20} className="text-blue-600" />
+    <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:max-w-xs z-50 font-mono">
+      <div className="bg-black/90 border border-gray-700 p-3">
+        <div className="flex items-start gap-2">
+          <div className="flex-shrink-0 w-6 h-6 border border-yellow-400 flex items-center justify-center">
+            <Download size={12} className="text-yellow-400" />
           </div>
 
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-medium text-gray-900 mb-1">
-              Install Warper
+            <h3 className="text-xs text-yellow-400 mb-1 tracking-wider">
+              INSTALL APP
             </h3>
-            <p className="text-xs text-gray-600 mb-3">
-              Install the app for faster access and offline editing
+            <p className="text-xs text-gray-300 mb-2 leading-tight">
+              Offline editing & faster access
             </p>
 
             <div className="flex gap-2">
               <Button
                 onPress={handleInstall}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="px-2 py-1 bg-yellow-400 hover:bg-yellow-300 text-black text-xs tracking-wider transition-colors focus:outline-none"
               >
-                Install
+                INSTALL
               </Button>
               <Button
                 onPress={handleDismiss}
-                className="px-3 py-1.5 text-gray-600 hover:text-gray-800 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 rounded-md"
+                className="px-2 py-1 text-gray-400 hover:text-gray-300 text-xs tracking-wider transition-colors focus:outline-none"
               >
-                Not now
+                SKIP
               </Button>
             </div>
           </div>
 
           <Button
             onPress={handleDismiss}
-            className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 rounded"
-            aria-label="Dismiss install prompt"
+            className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-300 transition-colors focus:outline-none"
+            aria-label="Dismiss"
           >
-            <X size={16} />
+            <X size={12} />
           </Button>
         </div>
       </div>
