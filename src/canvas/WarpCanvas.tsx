@@ -324,18 +324,27 @@ function WarpEffect({
       return;
     }
 
-    if (
-      history.length > 0 &&
-      historyIndex >= 0 &&
-      historyIndex < history.length &&
-      !isWarping &&
-      historyIndex !== prevHistoryIndex.current
-    ) {
-      restoreFromHistory(historyIndex);
+    if (!isWarping && historyIndex !== prevHistoryIndex.current) {
+      if (
+        historyIndex >= 0 &&
+        historyIndex < history.length &&
+        history.length > 0
+      ) {
+        restoreFromHistory(historyIndex);
+      } else if (historyIndex === -1) {
+        // Fully reset to original image (no displacement)
+        restoreToOriginal();
+      }
     }
 
     prevHistoryIndex.current = historyIndex;
-  }, [historyIndex, history.length, isWarping, restoreFromHistory]);
+  }, [
+    historyIndex,
+    history.length,
+    isWarping,
+    restoreFromHistory,
+    restoreToOriginal,
+  ]);
 
   // Handle compare mode - show original vs current
   useEffect(() => {

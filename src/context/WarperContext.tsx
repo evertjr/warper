@@ -260,8 +260,16 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleRestoreAll = useCallback(() => {
-    if (history.length > 0) setHistoryIndex(0);
-  }, [history.length]);
+    if (history.length === 0 && historyIndex === -1) return;
+
+    // Clear all displacement history and reset viewport
+    history.forEach((tex) => tex && tex.dispose && tex.dispose());
+    setHistory([]);
+    setHistoryIndex(-1);
+    setPanX(0);
+    setPanY(0);
+    setZoom(1);
+  }, [history.length, historyIndex]);
   const handlePanChange = useCallback((newPanX: number, newPanY: number) => {
     setPanX(newPanX);
     setPanY(newPanY);

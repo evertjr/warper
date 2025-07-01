@@ -32,7 +32,6 @@ function AppContent() {
     setExportFunction,
   } = useWarperContext();
 
-  // Memoize brush preview to prevent unnecessary re-renders
   const brushPreviewComponent = useMemo(() => {
     if (!brushPreview) return null;
     return (
