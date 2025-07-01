@@ -50,7 +50,6 @@ interface WarperContextValue {
   exportFunction: any;
   setExportFunction: React.Dispatch<any>;
   isImageLoaded: boolean;
-  setIsImageLoaded: React.Dispatch<React.SetStateAction<boolean>>;
   isComparing: boolean;
   setIsComparing: React.Dispatch<React.SetStateAction<boolean>>;
   exifData: ExifData | null;
@@ -73,50 +72,73 @@ interface WarperContextValue {
 const WarperContext = createContext<WarperContextValue | undefined>(undefined);
 
 export function WarperProvider({ children }: { children: React.ReactNode }) {
-  // --- State ---
+  // ---------------------------------------------------------------------
+  // Source image & metadata
+  // ---------------------------------------------------------------------
   const [image, setImage] = useState<string | null>(null);
-  const [brushSize, setBrushSize] = useState(50);
-  const [brushStrength, setBrushStrength] = useState(50);
-  const [zoom, setZoom] = useState(1);
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
-  const [brushPreview, setBrushPreview] = useState<{
-    x: number;
-    y: number;
-    diameter: number;
-  } | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [originalImageData, setOriginalImageData] = useState<{
     width: number;
     height: number;
     format: string;
   } | null>(null);
-  const [exportFunction, setExportFunction] = useState<any>(null);
-  const [isImageLoaded, setIsImageLoaded] = useState(false);
-  const historyRef = useRef<HistoryItem[]>([]);
-  const historyIndexRef = useRef(-1);
-  const [isComparing, setIsComparing] = useState(false);
   const [exifData, setExifData] = useState<ExifData | null>(null);
   const [hasWideGamutProfile, setHasWideGamutProfile] = useState(false);
 
-  // --- Effects ---
+  // ---------------------------------------------------------------------
+  // Brush & interaction
+  // ---------------------------------------------------------------------
+  const [brushSize, setBrushSize] = useState(50);
+  const [brushStrength, setBrushStrength] = useState(50);
+  const [brushPreview, setBrushPreview] = useState<{
+    x: number;
+    y: number;
+    diameter: number;
+  } | null>(null);
+
+  // ---------------------------------------------------------------------
+  // View (zoom & pan)
+  // ---------------------------------------------------------------------
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isComparing, setIsComparing] = useState(false);
+
+  // ---------------------------------------------------------------------
+  // History & export
+  // ---------------------------------------------------------------------
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [exportFunction, setExportFunction] = useState<any>(null);
+
+  // ---------------------------------------------------------------------
+  // Mutable refs (do not cause re-renders)
+  // ---------------------------------------------------------------------
+  const historyRef = useRef<HistoryItem[]>([]);
+  const historyIndexRef = useRef(-1);
+
+  // ---------------------------------------------------------------------
+  // Derived values
+  // ---------------------------------------------------------------------
+  // Image is considered loaded when we have dimensions > 0
+  const isImageLoaded =
+    !!originalImageData &&
+    originalImageData.width > 0 &&
+    originalImageData.height > 0;
+
+  // ---------------------------------------------------------------------
+  // Effects
+  // ---------------------------------------------------------------------
   useEffect(() => {
     historyRef.current = history;
   }, [history]);
   useEffect(() => {
     historyIndexRef.current = historyIndex;
   }, [historyIndex]);
-  useEffect(() => {
-    setIsImageLoaded(
-      !!originalImageData &&
-        originalImageData.width > 0 &&
-        originalImageData.height > 0,
-    );
-  }, [originalImageData]);
 
-  // --- Handlers ---
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
   const handleImageUpload = useCallback(async (file: File) => {
     setOriginalFile(file);
     const extractedExifData = await extractExifData(file);
@@ -126,15 +148,20 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
       extractedExifData.iccProfile.byteLength > 0
     );
     const colorSpace = extractedExifData?.ColorSpace;
-    const whitePoint = extractedExifData?.WhitePoint;
-    const colorSpaceData = extractedExifData?.ColorSpaceData;
+
+    // ---------------------------------------------------------------------
     // Detect wide gamut profiles
+    // ---------------------------------------------------------------------
     const isWideGamut =
       hasIccProfile ||
       colorSpace === "Adobe RGB" ||
       colorSpace === "ProPhoto RGB" ||
       colorSpace === 65535;
     setHasWideGamutProfile(isWideGamut);
+
+    // ---------------------------------------------------------------------
+    // Load image
+    // ---------------------------------------------------------------------
     const isHeif =
       /heic|heif/i.test(file.type) || /\.heic$|\.heif$/i.test(file.name);
     try {
@@ -153,7 +180,7 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
             const canvas = document.createElement("canvas");
             const ctx = canvas.getContext("2d", {
               colorSpace: "srgb",
-            } as any);
+            });
             if (!ctx) {
               setImage(e.target?.result as string);
               return;
@@ -188,7 +215,6 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
           setPanY(0);
           setZoom(1);
           setExportFunction(null);
-          setIsImageLoaded(false);
         }
       };
       reader.readAsDataURL(blob);
@@ -197,15 +223,20 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
   const handleUndo = useCallback(() => {
     setHistoryIndex((idx) => (idx > 0 ? idx - 1 : idx));
   }, []);
+
   const handleRedo = useCallback(() => {
     setHistoryIndex((idx) => {
       const currentHistoryLength = historyRef.current.length;
       return idx < currentHistoryLength - 1 ? idx + 1 : idx;
     });
   }, []);
+
   const onHistoryChange = useCallback((newHistory: HistoryItem[]) => {
     const maxHistorySize = 15;
     if (newHistory.length > maxHistorySize) {
@@ -227,6 +258,7 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
       setHistoryIndex(newHistory.length - 1);
     }
   }, []);
+
   const handleRestoreAll = useCallback(() => {
     if (history.length > 0) setHistoryIndex(0);
   }, [history.length]);
@@ -246,7 +278,9 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
     setIsComparing((prev) => !prev);
   }, []);
 
-  // --- Export logic ---
+  // ---------------------------------------------------------------------
+  // Export logic
+  // ---------------------------------------------------------------------
   const handleExportInternal = useCallback(
     async (hdr = false) => {
       if (!exportFunction || !originalImageData || !isImageLoaded) {
@@ -321,7 +355,9 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
     [handleExportInternal],
   );
 
-  // --- Keyboard shortcuts ---
+  // ---------------------------------------------------------------------
+  // Keyboard shortcuts
+  // ---------------------------------------------------------------------
   useKeyboardShortcuts({
     onUndo: handleUndo,
     onRedo: handleRedo,
@@ -331,7 +367,9 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
     onZoomChange: handleZoomChange,
   });
 
-  // --- Context value ---
+  // ---------------------------------------------------------------------
+  // Context value
+  // ---------------------------------------------------------------------
   const value: WarperContextValue = {
     image,
     setImage,
@@ -358,7 +396,6 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
     exportFunction,
     setExportFunction,
     isImageLoaded,
-    setIsImageLoaded,
     isComparing,
     setIsComparing,
     exifData,

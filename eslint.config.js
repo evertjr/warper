@@ -32,7 +32,7 @@ export default defineConfig([
       },
     },
     rules: {
-      // React Hooks Rules
+      // React Hooks Rules (includes React Compiler analysis)
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
 
@@ -43,12 +43,6 @@ export default defineConfig([
       "react/jsx-uses-vars": "error",
       "react/jsx-key": "error",
       "react/no-unescaped-entities": "warn",
-
-      // React Refresh
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
 
       // Accessibility Rules (subset of jsx-a11y)
       "jsx-a11y/alt-text": "warn",
