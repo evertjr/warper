@@ -1,8 +1,8 @@
 # Warper
 
-An open-source research playground exploring GPU-accelerated, color-managed image warping in the browser. Warper blends modern WebGL, React Compiler and ICC-aware pipelines to prototype new approaches to non-linear image manipulation.
+**Warper** is a open source professional grade tool designed for precise correction of lens distortion in photography—especially portraits captured with wide-angle lenses. Traditional lens correction algorithms often fall short, as they apply generic adjustments that do not account for subject distance or the nuanced physics of portraiture. This can leave facial features looking disproportionate or unnatural, even after automatic correction.
 
-The goal: **push what's possible in client-side imaging while keeping the code approachable for curious developers, artists and researchers alike**.
+Warper addresses this challenge by empowering photographers and retouchers to manually restore natural proportions with intuitive, physics-aware control. At its core is a high-fidelity displacement brush, operating in a true 3D texture space. Each brush stroke applies a custom GPU-accelerated displacement shader, enabling subtle, artifact-free adjustments that preserve the integrity of the image. The pipeline is fully color-managed, respecting embedded ICC profiles and EXIF metadata to ensure professional-grade results from start to finish.
 
 ---
 
@@ -10,27 +10,27 @@ The goal: **push what's possible in client-side imaging while keeping the code a
 
 ### Advanced Image Processing
 
-- **Novel displacement workflow** – Brush-driven warping backed by real-time GPU shaders.
-- **WebGL-Powered Rendering** - Hardware-accelerated image processing with Three.js
-- **Color Management** - Full ICC profile support with wide gamut color spaces (Adobe RGB, ProPhoto RGB)
-- **HDR Export** - High dynamic range image export capabilities
-- **EXIF Preservation** - Maintains original image metadata and color profiles
+- **Intuitive Displacement Brush** – Manual, physics-aware warping for natural, low-distortion results
+- **WebGL-Powered Rendering** – Hardware-accelerated image processing with Three.js
+- **Color Management** – Full ICC profile support with wide gamut color spaces (Adobe RGB, ProPhoto RGB)
+- **HDR Export** – High dynamic range image export capabilities
+- **EXIF Preservation** – Maintains original image metadata and color profiles
 
 ### Professional Tools
 
-- **Precision Brush System** - Adjustable size and strength with real-time preview
-- **Multi-level Undo/Redo** - Comprehensive history management (15 levels)
-- **Zoom & Pan** - Smooth viewport navigation with keyboard shortcuts
-- **Compare Mode** - Side-by-side original vs. edited comparison
-- **Format Support** - JPEG, PNG, WebP, HEIC/HEIF with automatic conversion
+- **Precision Brush System** – Adjustable size and strength with real-time preview
+- **Multi-level Undo/Redo** – Comprehensive history management (15 levels)
+- **Zoom & Pan** – Smooth viewport navigation with keyboard shortcuts
+- **Compare Mode** – Side-by-side original vs. edited comparison
+- **Format Support** – JPEG, PNG, WebP, HEIC/HEIF with automatic conversion
 
 ### Performance & UX
 
-- **React Compiler** - Automatic memoization for optimal performance
-- **Progressive Web App** - Offline support with service worker
-- **Responsive Design** - Professional UI with Tailwind CSS
-- **Keyboard Shortcuts** - Efficient workflow with hotkeys
-- **Touch Support** - Full mobile and tablet compatibility
+- **React Compiler** – Automatic memoization for optimal performance
+- **Progressive Web App** – Offline support with service worker
+- **Responsive Design** – Professional UI with Tailwind CSS
+- **Keyboard Shortcuts** – Efficient workflow with familiar hotkeys
+- **Touch Support** – Full mobile and tablet compatibility
 
 ## Technology Stack
 
