@@ -97,7 +97,11 @@ function AppContent() {
       ) : (
         <div className="flex flex-col items-center justify-center h-full bg-black">
           <div className="text-center flex flex-col items-center">
-            <img src="/icon-192.png" alt="Warper" className="w-16 h-16 mb-6" />
+            <img
+              src="/public/icon-192.png"
+              alt="Warper"
+              className="w-16 h-16 mb-6"
+            />
             <h1 className="text-2xl font-mono text-white mb-1">WARPER</h1>
             <p className="text-gray-400 text-xs font-mono mb-8 tracking-wider">
               IMAGE DISPLACEMENT TOOL

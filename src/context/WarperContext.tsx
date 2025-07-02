@@ -238,7 +238,7 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const onHistoryChange = useCallback((newHistory: HistoryItem[]) => {
-    const maxHistorySize = 15;
+    const maxHistorySize = 5;
     if (newHistory.length > maxHistorySize) {
       const toDispose = newHistory.slice(
         1,
