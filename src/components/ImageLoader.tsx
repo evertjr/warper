@@ -22,7 +22,7 @@ export function ImageLoader() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,image/gif,image/bmp"
         onChange={handleFileChange}
         className="hidden"
       />
