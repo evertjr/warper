@@ -98,7 +98,7 @@ function AppContent() {
         <div className="flex flex-col items-center justify-center h-full bg-black">
           <div className="text-center flex flex-col items-center">
             <img
-              src="/public/icon-192.png"
+              src="/icon-192.png"
               alt="Warper"
               className="w-16 h-16 mb-6"
             />
