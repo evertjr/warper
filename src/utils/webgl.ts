@@ -72,7 +72,7 @@ export const getHistoryRenderTargetParams = (
 };
 
 // Mobile optimization constants - keep quality high but manage memory better
-export const MAX_HISTORY_SIZE = 15; // Consistent history size
+export const MAX_HISTORY_SIZE = 30; // Upper bound for safe history retention
 
 // Detect if we're on a mobile device
 export const isMobileDevice = () => {

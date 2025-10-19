@@ -95,11 +95,11 @@ function WarpEffect({
   const [isTwoFingerGesture, setIsTwoFingerGesture] = useState(false);
   const [isDragStarted, setIsDragStarted] = useState(false);
   const [isWarpingDelayed, setIsWarpingDelayed] = useState(false);
-  const lastBrushPreview = useRef<{
-    x: number;
-    y: number;
-    diameter: number;
-  } | null>(null);
+const lastBrushPreview = useRef<{
+  x: number;
+  y: number;
+  diameter: number;
+} | null>(null);
   const mouse = useRef(new THREE.Vector2(0, 0));
   const prevMouse = useRef(new THREE.Vector2(0, 0));
   const panStart = useRef(new THREE.Vector2(0, 0));
@@ -111,6 +111,14 @@ function WarpEffect({
   const warpDelayTimeout = useRef<number | null>(null);
   const DRAG_THRESHOLD = 5; // pixels
   const WARP_DELAY = 80; // milliseconds
+  const activeTouchCount = useRef(0);
+
+  const clearPreview = useCallback(() => {
+    if (lastBrushPreview.current !== null && onPointerMove) {
+      lastBrushPreview.current = null;
+      onPointerMove(null);
+    }
+  }, [onPointerMove]);
 
   const displayMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
 
@@ -143,9 +151,34 @@ function WarpEffect({
 
   const historyRTParams = useMemo(() => getHistoryRenderTargetParams(gl), [gl]);
 
+  const isMobile = useMemo(() => isMobileDevice(), []);
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const prevTouchAction = canvas.style.touchAction;
+    const prevUserSelect = canvas.style.userSelect;
+    const prevWebkitUserSelect = (canvas.style as any).webkitUserSelect;
+    const prevMsUserSelect = (canvas.style as any).msUserSelect;
+    const prevWebkitTouchCallout = (canvas.style as any).webkitTouchCallout;
+
+    canvas.style.touchAction = "none";
+    canvas.style.userSelect = "none";
+    (canvas.style as any).webkitUserSelect = "none";
+    (canvas.style as any).msUserSelect = "none";
+    (canvas.style as any).webkitTouchCallout = "none";
+
+    return () => {
+      canvas.style.touchAction = prevTouchAction;
+      canvas.style.userSelect = prevUserSelect;
+      (canvas.style as any).webkitUserSelect = prevWebkitUserSelect;
+      (canvas.style as any).msUserSelect = prevMsUserSelect;
+      (canvas.style as any).webkitTouchCallout = prevWebkitTouchCallout;
+    };
+  }, [gl]);
+
   const historyLimit = useMemo(
-    () => (isMobileDevice() ? Math.min(3, MAX_HISTORY_SIZE) : MAX_HISTORY_SIZE),
-    [],
+    () => (isMobile ? Math.min(6, MAX_HISTORY_SIZE) : Math.min(20, MAX_HISTORY_SIZE)),
+    [isMobile],
   );
 
   useEffect(() => {
@@ -235,13 +268,13 @@ function WarpEffect({
 
     // Force garbage collection on mobile (if available) - but maintain quality
     if (
-      isMobileDevice() &&
+      isMobile &&
       "gc" in window &&
       typeof (window as any).gc === "function"
     ) {
       setTimeout(() => (window as any).gc(), 100);
     }
-  }, [texture, gl, displacementRTParams]);
+  }, [texture, gl, displacementRTParams, isMobile]);
 
   const currentFBOIndex = useRef(0);
 
@@ -451,8 +484,14 @@ function WarpEffect({
   }, [panX, panY]);
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    e.nativeEvent.preventDefault();
+    e.stopPropagation();
     // Don't start warping if we're in a two-finger gesture or comparing
     if (isTwoFingerGesture || isComparing) return;
+
+    if (e.pointerType === "touch") {
+      activeTouchCount.current = Math.max(activeTouchCount.current, 1);
+    }
 
     // Clear any existing timeout
     if (warpDelayTimeout.current) {
@@ -481,6 +520,8 @@ function WarpEffect({
   };
 
   const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
+    e.nativeEvent.preventDefault();
+    e.stopPropagation();
     if (isPanning && !isTwoFingerGesture) {
       const deltaX = e.pointer.x - panStart.current.x;
       const deltaY = e.pointer.y - panStart.current.y;
@@ -518,7 +559,14 @@ function WarpEffect({
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e?: ThreeEvent<PointerEvent>) => {
+    if (e) {
+      e.nativeEvent.preventDefault();
+      e.stopPropagation();
+      if (e.pointerType === "touch") {
+        activeTouchCount.current = 0;
+      }
+    }
     // Clear any pending warp delay
     if (warpDelayTimeout.current) {
       clearTimeout(warpDelayTimeout.current);
@@ -527,6 +575,7 @@ function WarpEffect({
 
     if (isPanning) {
       setIsPanning(false);
+      clearPreview();
     } else if (
       (isWarping || isWarpingDelayed) &&
       !isTwoFingerGesture &&
@@ -536,6 +585,7 @@ function WarpEffect({
       setIsWarping(false);
       setIsDragStarted(false);
       setIsWarpingDelayed(false);
+      clearPreview();
 
       // Only save to history if we actually started warping (not just delayed)
       if (isWarpingDelayed && fbosRef.current.length > 0) {
@@ -543,7 +593,7 @@ function WarpEffect({
         const w = currentDisp.width;
         const h = currentDisp.height;
 
-        const maxPixels = isMobileDevice() ? 400_000 : 1_600_000;
+        const maxPixels = isMobile ? 600_000 : 2_400_000;
         const totalPixels = w * h;
         const scale =
           totalPixels > maxPixels
@@ -604,6 +654,7 @@ function WarpEffect({
         // Mark that we just added history so the upcoming historyIndex change doesn't trigger restoration
         justAddedHistory.current = true;
       }
+      clearPreview();
     } else {
       // Reset states if no drag occurred
       setIsWarping(false);
@@ -641,6 +692,7 @@ function WarpEffect({
   };
 
   const handleTouchStart = (e: TouchEvent) => {
+    activeTouchCount.current = e.touches.length;
     if (e.touches.length === 2) {
       e.preventDefault();
       // Clear any pending warp delay
@@ -677,6 +729,7 @@ function WarpEffect({
   };
 
   const handleTouchMove = (e: TouchEvent) => {
+    activeTouchCount.current = e.touches.length;
     if (e.touches.length === 2 && isPanning && isTwoFingerGesture) {
       e.preventDefault();
 
@@ -705,6 +758,7 @@ function WarpEffect({
   };
 
   const handleTouchEnd = (e: TouchEvent) => {
+    activeTouchCount.current = e.touches.length;
     if (e.touches.length < 2) {
       // Clear any pending warp delay
       if (warpDelayTimeout.current) {
@@ -721,8 +775,24 @@ function WarpEffect({
         setIsDragStarted(false);
         setIsWarping(false);
         setIsWarpingDelayed(false);
+        clearPreview();
       }
     }
+  };
+
+  const handleTouchCancel = (e: TouchEvent) => {
+    if (warpDelayTimeout.current) {
+      clearTimeout(warpDelayTimeout.current);
+      warpDelayTimeout.current = null;
+    }
+    activeTouchCount.current = 0;
+    setIsPanning(false);
+    setTouchDistance(0);
+    setIsTwoFingerGesture(false);
+    setIsDragStarted(false);
+    setIsWarping(false);
+    setIsWarpingDelayed(false);
+    clearPreview();
   };
 
   // Cleanup timeout on unmount
@@ -747,26 +817,28 @@ function WarpEffect({
 
       // Force garbage collection on mobile (if available)
       if (
-        isMobileDevice() &&
+        isMobile &&
         "gc" in window &&
         typeof (window as any).gc === "function"
       ) {
         setTimeout(() => (window as any).gc(), 100);
       }
     };
-  }, []);
+  }, [isMobile]);
 
   // Add touch event listeners
   useEffect(() => {
     const canvas = gl.domElement;
     canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
     canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
-    canvas.addEventListener("touchend", handleTouchEnd);
+    canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", handleTouchCancel, { passive: false });
 
     return () => {
       canvas.removeEventListener("touchstart", handleTouchStart);
       canvas.removeEventListener("touchmove", handleTouchMove);
       canvas.removeEventListener("touchend", handleTouchEnd);
+      canvas.removeEventListener("touchcancel", handleTouchCancel);
     };
   }, [
     gl.domElement,
@@ -784,6 +856,8 @@ function WarpEffect({
     isWarpingDelayed,
     handleTouchStart,
     handleTouchMove,
+    handleTouchEnd,
+    handleTouchCancel,
   ]);
 
   useFrame(({ pointer, size }) => {
@@ -796,7 +870,13 @@ function WarpEffect({
     const intersects = raycaster.intersectObject(meshRef.current);
     const hit = intersects[0];
 
-    if (onPointerMove && hit && !isTwoFingerGesture) {
+    const shouldShowPreview =
+      onPointerMove &&
+      hit &&
+      !isTwoFingerGesture &&
+      (!isMobile || activeTouchCount.current > 0);
+
+    if (shouldShowPreview) {
       const worldPoint = hit.point.clone();
       const ndc = worldPoint.project(camera);
       const screenX = (ndc.x * 0.5 + 0.5) * size.width;
@@ -817,14 +897,8 @@ function WarpEffect({
         lastBrushPreview.current = newPreview;
         onPointerMove(newPreview);
       }
-    } else if (
-      onPointerMove &&
-      isTwoFingerGesture &&
-      lastBrushPreview.current !== null
-    ) {
-      // Hide brush preview during two-finger gestures (only if not already hidden)
-      lastBrushPreview.current = null;
-      onPointerMove(null);
+    } else if (onPointerMove && lastBrushPreview.current !== null) {
+      clearPreview();
     }
 
     // Only apply warping if drag has started, delay has completed, and we're actually warping

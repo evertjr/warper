@@ -252,7 +252,7 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const onHistoryChange = useCallback((newHistory: HistoryItem[]) => {
-    const maxHistorySize = isMobileDevice() ? 3 : 5;
+    const maxHistorySize = isMobileDevice() ? 6 : 20;
     if (newHistory.length > maxHistorySize) {
       const keepTail = Math.max(0, maxHistorySize - 1);
       const start = newHistory.length - keepTail;
