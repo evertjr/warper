@@ -23,6 +23,7 @@ import {
   cleanupHistory,
   disposeRenderTarget,
   getDisplacementRenderTargetParams,
+  getHistoryRenderTargetParams,
   isMobileDevice,
   MAX_HISTORY_SIZE,
 } from "../utils/webgl";
@@ -139,6 +140,13 @@ function WarpEffect({
     [gl],
   );
 
+  const historyRTParams = useMemo(() => getHistoryRenderTargetParams(gl), [gl]);
+
+  const historyLimit = useMemo(
+    () => (isMobileDevice() ? Math.min(3, MAX_HISTORY_SIZE) : MAX_HISTORY_SIZE),
+    [],
+  );
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space") {
@@ -212,11 +220,7 @@ function WarpEffect({
     if (originalStateRef.current) {
       originalStateRef.current.dispose();
     }
-    const originalRT = new THREE.WebGLRenderTarget(
-      w,
-      h,
-      displacementRTParams,
-    );
+    const originalRT = new THREE.WebGLRenderTarget(w, h, displacementRTParams);
     gl.setRenderTarget(originalRT);
     gl.clear();
     gl.setRenderTarget(null);
@@ -533,7 +537,7 @@ function WarpEffect({
         const h = currentDisp.height;
 
         // Create a snapshot of the current displacement
-        const rtParams = displacementRTParams;
+        const rtParams = historyRTParams;
         const snapshotRT = new THREE.WebGLRenderTarget(w, h, rtParams);
         const tempScene = new THREE.Scene();
         const tempQuad = new THREE.Mesh(
@@ -550,14 +554,25 @@ function WarpEffect({
         tempQuad.geometry.dispose();
         tempQuad.material.dispose();
 
+        // Dispose redo branch textures before appending new entry
+        const preservedHistory = history.slice(0, historyIndex + 1);
+        const discardedHistory = history.slice(historyIndex + 1);
+
+        discardedHistory.forEach((texture) => {
+          if (
+            texture &&
+            texture.dispose &&
+            texture !== originalStateRef.current
+          ) {
+            texture.dispose();
+          }
+        });
+
         // Add to history with size management
-        const currentHistory = [
-          ...history.slice(0, historyIndex + 1),
-          snapshotRT.texture,
-        ];
+        const currentHistory = [...preservedHistory, snapshotRT.texture];
         const cleanedHistory = cleanupHistory(
           currentHistory,
-          MAX_HISTORY_SIZE,
+          historyLimit,
           originalStateRef.current,
         );
         onHistoryChange(cleanedHistory);
@@ -743,6 +758,8 @@ function WarpEffect({
     isDragStarted,
     isWarping,
     isWarpingDelayed,
+    handleTouchStart,
+    handleTouchMove,
   ]);
 
   useFrame(({ pointer, size }) => {

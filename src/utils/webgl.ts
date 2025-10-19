@@ -58,11 +58,25 @@ export const getDisplacementRenderTargetParams = (
   return params;
 };
 
+export const getHistoryRenderTargetParams = (
+  renderer: THREE.WebGLRenderer,
+) => {
+  const base = getDisplacementRenderTargetParams(renderer);
+  // Clone to avoid mutating cached params
+  const params: THREE.RenderTargetOptions = { ...base };
+  params.type = THREE.UnsignedByteType;
+  // History snapshots don't need anisotropy filtering – keep things compatible
+  params.minFilter = base.minFilter;
+  params.magFilter = base.magFilter;
+  return params;
+};
+
 // Mobile optimization constants - keep quality high but manage memory better
 export const MAX_HISTORY_SIZE = 15; // Consistent history size
 
 // Detect if we're on a mobile device
 export const isMobileDevice = () => {
+  if (typeof navigator === "undefined") return false;
   return (
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       navigator.userAgent,

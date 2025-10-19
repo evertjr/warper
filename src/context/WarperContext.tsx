@@ -13,6 +13,7 @@ import {
   extractExifData,
   type ExifData,
 } from "../utils/exif";
+import { isMobileDevice } from "../utils/webgl";
 
 export type HistoryItem = THREE.Texture;
 
@@ -140,6 +141,17 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
   // Handlers
   // ---------------------------------------------------------------------
   const handleImageUpload = useCallback(async (file: File) => {
+    setHistory((prev) => {
+      prev.forEach((tex) => {
+        if (tex && tex.dispose) tex.dispose();
+      });
+      return [];
+    });
+    setHistoryIndex(-1);
+    setPanX(0);
+    setPanY(0);
+    setZoom(1);
+
     setOriginalFile(file);
     const extractedExifData = await extractExifData(file);
     setExifData(extractedExifData);
@@ -210,10 +222,6 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
           };
           img.src = e.target?.result as string;
           setHistory([]);
-          setHistoryIndex(-1);
-          setPanX(0);
-          setPanY(0);
-          setZoom(1);
           setExportFunction(null);
         }
       };
@@ -238,7 +246,7 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const onHistoryChange = useCallback((newHistory: HistoryItem[]) => {
-    const maxHistorySize = 5;
+    const maxHistorySize = isMobileDevice() ? 3 : 5;
     if (newHistory.length > maxHistorySize) {
       const toDispose = newHistory.slice(
         1,
