@@ -3,7 +3,7 @@ export function createHDRFile(
   floatPixels: Float32Array,
   width: number,
   height: number,
-): Uint8Array {
+): ArrayBuffer {
   // HDR header
   const header = [
     "#?RADIANCE",
@@ -63,5 +63,5 @@ export function createHDRFile(
   result.set(headerBytes, 0);
   result.set(rgbeData, headerBytes.length);
 
-  return result;
+  return result.buffer;
 }

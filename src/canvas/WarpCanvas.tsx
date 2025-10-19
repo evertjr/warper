@@ -21,8 +21,8 @@ import { DisplayShader } from "../shaders/displayShader";
 import { createHDRFile } from "../utils/hdr";
 import {
   cleanupHistory,
-  DISP_RT_PARAMS,
   disposeRenderTarget,
+  getDisplacementRenderTargetParams,
   isMobileDevice,
   MAX_HISTORY_SIZE,
 } from "../utils/webgl";
@@ -134,6 +134,11 @@ function WarpEffect({
     displayMaterialRef.current = displayMaterial;
   }, [displayMaterial]);
 
+  const displacementRTParams = useMemo(
+    () => getDisplacementRenderTargetParams(gl),
+    [gl],
+  );
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space") {
@@ -187,10 +192,10 @@ function WarpEffect({
       : 0;
 
     // Create displacement FBOs for ping-pong rendering - full quality
-    const fbo1 = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
+    const fbo1 = new THREE.WebGLRenderTarget(w, h, displacementRTParams);
     fbo1.texture.anisotropy = maxAnisotropy;
 
-    const fbo2 = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
+    const fbo2 = new THREE.WebGLRenderTarget(w, h, displacementRTParams);
     fbo2.texture.anisotropy = maxAnisotropy;
 
     // Clear displacement to zero vector
@@ -207,7 +212,11 @@ function WarpEffect({
     if (originalStateRef.current) {
       originalStateRef.current.dispose();
     }
-    const originalRT = new THREE.WebGLRenderTarget(w, h, DISP_RT_PARAMS);
+    const originalRT = new THREE.WebGLRenderTarget(
+      w,
+      h,
+      displacementRTParams,
+    );
     gl.setRenderTarget(originalRT);
     gl.clear();
     gl.setRenderTarget(null);
@@ -227,7 +236,7 @@ function WarpEffect({
     ) {
       setTimeout(() => (window as any).gc(), 100);
     }
-  }, [texture, gl]);
+  }, [texture, gl, displacementRTParams]);
 
   const currentFBOIndex = useRef(0);
 
@@ -524,7 +533,7 @@ function WarpEffect({
         const h = currentDisp.height;
 
         // Create a snapshot of the current displacement
-        const rtParams = DISP_RT_PARAMS;
+        const rtParams = displacementRTParams;
         const snapshotRT = new THREE.WebGLRenderTarget(w, h, rtParams);
         const tempScene = new THREE.Scene();
         const tempQuad = new THREE.Mesh(
