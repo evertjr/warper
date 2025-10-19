@@ -19,6 +19,7 @@ import * as THREE from "three";
 import { BrushShader } from "../shaders/brushShader";
 import { DisplayShader } from "../shaders/displayShader";
 import { createHDRFile } from "../utils/hdr";
+import type { HistoryItem } from "../context/WarperContext";
 import {
   cleanupHistory,
   disposeRenderTarget,
@@ -33,8 +34,8 @@ interface WarpEffectProps {
   brushSize: number;
   brushStrength: number;
   zoom: number;
-  onHistoryChange: (history: THREE.Texture[]) => void;
-  history: THREE.Texture[];
+  onHistoryChange: (history: HistoryItem[]) => void;
+  history: HistoryItem[];
   historyIndex: number;
   onPointerMove?: (
     pos: { x: number; y: number; diameter: number } | null,
@@ -293,39 +294,45 @@ function WarpEffect({
   const restoreFromHistory = useCallback(
     (targetHistoryIndex: number) => {
       if (
-        history &&
-        history.length > 0 &&
-        targetHistoryIndex >= 0 &&
-        targetHistoryIndex < history.length &&
-        fbosRef.current.length > 0
+        !history ||
+        history.length === 0 ||
+        targetHistoryIndex < 0 ||
+        targetHistoryIndex >= history.length ||
+        fbosRef.current.length === 0
       ) {
-        const displacementToRestore = history[targetHistoryIndex];
-        // Copy the displacement texture into both FBOs so that further strokes continue from correct state
-        fbosRef.current.forEach((targetFBO) => {
-          const tempScene = new THREE.Scene();
-          const tempQuad = new THREE.Mesh(
-            new THREE.PlaneGeometry(2, 2),
-            new THREE.MeshBasicMaterial({ map: displacementToRestore }),
-          );
-          tempScene.add(tempQuad);
+        return;
+      }
 
-          gl.setRenderTarget(targetFBO);
-          gl.render(tempScene, orthoCamera);
-          gl.setRenderTarget(null);
+      const snapshot = history[targetHistoryIndex];
+      if (!snapshot) {
+        restoreToOriginal();
+        return;
+      }
 
-          // Clean up temporary objects immediately
-          tempQuad.geometry.dispose();
-          tempQuad.material.dispose();
-        });
+      const copyScene = new THREE.Scene();
+      const copyQuad = new THREE.Mesh(
+        new THREE.PlaneGeometry(2, 2),
+        new THREE.MeshBasicMaterial({
+          map: snapshot.target.texture,
+        }),
+      );
+      copyScene.add(copyQuad);
 
-        // Update display material displacement uniform to use the currently active FBO
-        if (displayMaterialRef.current) {
-          displayMaterialRef.current.uniforms.uDisplacement.value =
-            fbosRef.current[currentFBOIndex.current].texture;
-        }
+      fbosRef.current.forEach((targetFBO) => {
+        gl.setRenderTarget(targetFBO);
+        gl.render(copyScene, orthoCamera);
+        gl.setRenderTarget(null);
+      });
+
+      copyQuad.geometry.dispose();
+      (copyQuad.material as THREE.Material).dispose();
+
+      if (displayMaterialRef.current) {
+        displayMaterialRef.current.uniforms.uDisplacement.value =
+          fbosRef.current[currentFBOIndex.current].texture;
       }
     },
-    [history, gl, orthoCamera],
+    [history, gl, orthoCamera, restoreToOriginal],
   );
 
   // Restore texture from history when historyIndex changes (undo/redo)
@@ -536,9 +543,26 @@ function WarpEffect({
         const w = currentDisp.width;
         const h = currentDisp.height;
 
-        // Create a snapshot of the current displacement
-        const rtParams = historyRTParams;
-        const snapshotRT = new THREE.WebGLRenderTarget(w, h, rtParams);
+        const maxPixels = isMobileDevice() ? 400_000 : 1_600_000;
+        const totalPixels = w * h;
+        const scale =
+          totalPixels > maxPixels
+            ? Math.sqrt(maxPixels / Math.max(1, totalPixels))
+            : 1;
+        const snapshotWidth = Math.max(64, Math.round(w * scale));
+        const snapshotHeight = Math.max(64, Math.round(h * scale));
+
+        // Create a snapshot of the current displacement with reduced resolution
+        const snapshotRT = new THREE.WebGLRenderTarget(
+          snapshotWidth,
+          snapshotHeight,
+          historyRTParams,
+        );
+        snapshotRT.texture.minFilter = THREE.LinearFilter;
+        snapshotRT.texture.magFilter = THREE.LinearFilter;
+        snapshotRT.texture.generateMipmaps = false;
+        snapshotRT.texture.colorSpace = THREE.LinearSRGBColorSpace;
+
         const tempScene = new THREE.Scene();
         const tempQuad = new THREE.Mesh(
           new THREE.PlaneGeometry(2, 2),
@@ -552,28 +576,28 @@ function WarpEffect({
 
         // Clean up temporary objects
         tempQuad.geometry.dispose();
-        tempQuad.material.dispose();
+        (tempQuad.material as THREE.Material).dispose();
 
-        // Dispose redo branch textures before appending new entry
         const preservedHistory = history.slice(0, historyIndex + 1);
         const discardedHistory = history.slice(historyIndex + 1);
-
-        discardedHistory.forEach((texture) => {
-          if (
-            texture &&
-            texture.dispose &&
-            texture !== originalStateRef.current
-          ) {
-            texture.dispose();
-          }
+        discardedHistory.forEach((item) => {
+          if (item && item.target) disposeRenderTarget(item.target);
         });
 
+        const historySnapshot: HistoryItem = {
+          target: snapshotRT,
+          width: snapshotWidth,
+          height: snapshotHeight,
+        };
+
         // Add to history with size management
-        const currentHistory = [...preservedHistory, snapshotRT.texture];
+        const currentHistory = [...preservedHistory, historySnapshot];
         const cleanedHistory = cleanupHistory(
           currentHistory,
           historyLimit,
-          originalStateRef.current,
+          (item) => {
+            if (item && item.target) disposeRenderTarget(item.target);
+          },
         );
         onHistoryChange(cleanedHistory);
 
@@ -868,8 +892,7 @@ function WarpEffect({
       history.length === 0 &&
       originalStateRef.current
     ) {
-      // Use the original state reference directly - don't create a new texture
-      onHistoryChange([originalStateRef.current]);
+      onHistoryChange([null]);
 
       // Mark component as initialized after texture is loaded and history is set
       console.log("WarpCanvas component initialized, setting export function");

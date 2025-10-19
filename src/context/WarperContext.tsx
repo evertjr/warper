@@ -6,16 +6,22 @@ import React, {
   useRef,
   useState,
 } from "react";
-import * as THREE from "three";
+import type { WebGLRenderTarget } from "three";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import {
   downloadCanvasWithExif,
   extractExifData,
   type ExifData,
 } from "../utils/exif";
-import { isMobileDevice } from "../utils/webgl";
+import { disposeRenderTarget, isMobileDevice } from "../utils/webgl";
 
-export type HistoryItem = THREE.Texture;
+export interface HistorySnapshot {
+  target: WebGLRenderTarget;
+  width: number;
+  height: number;
+}
+
+export type HistoryItem = HistorySnapshot | null;
 
 interface WarperContextValue {
   image: string | null;
@@ -142,8 +148,8 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
   // ---------------------------------------------------------------------
   const handleImageUpload = useCallback(async (file: File) => {
     setHistory((prev) => {
-      prev.forEach((tex) => {
-        if (tex && tex.dispose) tex.dispose();
+      prev.forEach((item) => {
+        if (item && item.target) disposeRenderTarget(item.target);
       });
       return [];
     });
@@ -248,16 +254,15 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
   const onHistoryChange = useCallback((newHistory: HistoryItem[]) => {
     const maxHistorySize = isMobileDevice() ? 3 : 5;
     if (newHistory.length > maxHistorySize) {
-      const toDispose = newHistory.slice(
-        1,
-        newHistory.length - maxHistorySize + 1,
-      );
-      toDispose.forEach((texture) => {
-        if (texture && texture.dispose) texture.dispose();
+      const keepTail = Math.max(0, maxHistorySize - 1);
+      const start = newHistory.length - keepTail;
+      const toDispose = newHistory.slice(1, Math.max(1, start));
+      toDispose.forEach((item) => {
+        if (item && item.target) disposeRenderTarget(item.target);
       });
       const trimmedHistory = [
         newHistory[0],
-        ...newHistory.slice(newHistory.length - maxHistorySize + 1),
+        ...newHistory.slice(start),
       ];
       setHistory(trimmedHistory);
       setHistoryIndex(trimmedHistory.length - 1);
@@ -271,13 +276,15 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
     if (history.length === 0 && historyIndex === -1) return;
 
     // Clear all displacement history and reset viewport
-    history.forEach((tex) => tex && tex.dispose && tex.dispose());
+    history.forEach((item) => {
+      if (item && item.target) disposeRenderTarget(item.target);
+    });
     setHistory([]);
     setHistoryIndex(-1);
     setPanX(0);
     setPanY(0);
     setZoom(1);
-  }, [history.length, historyIndex]);
+  }, [history, historyIndex]);
   const handlePanChange = useCallback((newPanX: number, newPanY: number) => {
     setPanX(newPanX);
     setPanY(newPanY);

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import * as THREE from "three";
 import { WarpCanvas } from "./canvas/WarpCanvas";
 import { BrushSettingsPopover } from "./components/BrushSettingsPopover";
 import { ImageLoader } from "./components/ImageLoader";
@@ -10,8 +9,6 @@ import { InstallPrompt } from "./components/InstallPrompt";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { Toolbar } from "./components/Toolbar";
 import { WarperProvider, useWarperContext } from "./context/WarperContext";
-
-export type HistoryItem = THREE.Texture;
 
 function AppContent() {
   const {

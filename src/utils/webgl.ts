@@ -64,7 +64,7 @@ export const getHistoryRenderTargetParams = (
   const base = getDisplacementRenderTargetParams(renderer);
   // Clone to avoid mutating cached params
   const params: THREE.RenderTargetOptions = { ...base };
-  params.type = THREE.UnsignedByteType;
+  params.format = base.format ?? THREE.RGBAFormat;
   // History snapshots don't need anisotropy filtering – keep things compatible
   params.minFilter = base.minFilter;
   params.magFilter = base.magFilter;
@@ -93,20 +93,16 @@ export const disposeRenderTarget = (rt: THREE.WebGLRenderTarget) => {
   }
 };
 
-export const cleanupHistory = (
-  history: THREE.Texture[],
+export const cleanupHistory = <T>(
+  history: T[],
   maxSize: number = MAX_HISTORY_SIZE,
-  originalState?: THREE.Texture | null,
+  dispose?: (item: T) => void,
 ) => {
   if (history.length <= maxSize) return history;
-
-  const toDispose = history.slice(0, history.length - maxSize);
-  toDispose.forEach((texture) => {
-    // Never dispose the original state texture
-    if (texture && texture.dispose && texture !== originalState) {
-      texture.dispose();
-    }
-  });
-
-  return history.slice(history.length - maxSize);
+  const keepTail = Math.max(0, maxSize - 1);
+  const start = history.length - keepTail;
+  if (dispose) {
+    history.slice(1, Math.max(1, start)).forEach((item) => dispose(item));
+  }
+  return [history[0], ...history.slice(start)];
 };
