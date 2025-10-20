@@ -56,15 +56,13 @@ export function useKeyboardShortcuts({
       // Zoom shortcuts
       if (event.key === "+" || event.key === "=") {
         event.preventDefault();
-        const newZoom = Math.min(5, zoom * 1.1);
-        onZoomChange(newZoom);
+        onZoomChange(zoom * 1.1);
         return;
       }
 
       if (event.key === "-") {
         event.preventDefault();
-        const newZoom = Math.max(0.1, zoom / 1.1);
-        onZoomChange(newZoom);
+        onZoomChange(zoom / 1.1);
         return;
       }
     };

@@ -82,6 +82,10 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
   // ---------------------------------------------------------------------
   // Source image & metadata
   // ---------------------------------------------------------------------
+  const isMobile = isMobileDevice();
+  const MIN_ZOOM = 0.05;
+  const MAX_ZOOM = isMobile ? 12 : 24;
+
   const [image, setImage] = useState<string | null>(null);
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [originalImageData, setOriginalImageData] = useState<{
@@ -285,13 +289,18 @@ export function WarperProvider({ children }: { children: React.ReactNode }) {
     setPanY(0);
     setZoom(1);
   }, [history, historyIndex]);
+  const clampZoomValue = useCallback(
+    (value: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value)),
+    [MIN_ZOOM, MAX_ZOOM],
+  );
+
   const handlePanChange = useCallback((newPanX: number, newPanY: number) => {
     setPanX(newPanX);
     setPanY(newPanY);
   }, []);
   const handleZoomChange = useCallback((newZoom: number) => {
-    setZoom(newZoom);
-  }, []);
+    setZoom(clampZoomValue(newZoom));
+  }, [clampZoomValue]);
   const handleResetView = useCallback(() => {
     setPanX(0);
     setPanY(0);

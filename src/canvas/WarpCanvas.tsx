@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useTexture } from "@react-three/drei";
 import {
   Canvas,
@@ -16,10 +17,10 @@ import {
 } from "react";
 import * as THREE from "three";
 
+import type { HistoryItem } from "../context/WarperContext";
 import { BrushShader } from "../shaders/brushShader";
 import { DisplayShader } from "../shaders/displayShader";
 import { createHDRFile } from "../utils/hdr";
-import type { HistoryItem } from "../context/WarperContext";
 import {
   cleanupHistory,
   disposeRenderTarget,
@@ -95,11 +96,11 @@ function WarpEffect({
   const [isTwoFingerGesture, setIsTwoFingerGesture] = useState(false);
   const [isDragStarted, setIsDragStarted] = useState(false);
   const [isWarpingDelayed, setIsWarpingDelayed] = useState(false);
-const lastBrushPreview = useRef<{
-  x: number;
-  y: number;
-  diameter: number;
-} | null>(null);
+  const lastBrushPreview = useRef<{
+    x: number;
+    y: number;
+    diameter: number;
+  } | null>(null);
   const mouse = useRef(new THREE.Vector2(0, 0));
   const prevMouse = useRef(new THREE.Vector2(0, 0));
   const panStart = useRef(new THREE.Vector2(0, 0));
@@ -111,6 +112,7 @@ const lastBrushPreview = useRef<{
   const warpDelayTimeout = useRef<number | null>(null);
   const DRAG_THRESHOLD = 5; // pixels
   const WARP_DELAY = 80; // milliseconds
+  const MIN_ZOOM = 0.05;
   const activeTouchCount = useRef(0);
 
   const clearPreview = useCallback(() => {
@@ -177,8 +179,16 @@ const lastBrushPreview = useRef<{
   }, [gl]);
 
   const historyLimit = useMemo(
-    () => (isMobile ? Math.min(6, MAX_HISTORY_SIZE) : Math.min(20, MAX_HISTORY_SIZE)),
+    () =>
+      isMobile ? Math.min(6, MAX_HISTORY_SIZE) : Math.min(20, MAX_HISTORY_SIZE),
     [isMobile],
+  );
+
+  const maxZoom = useMemo(() => (isMobile ? 24 : 48), [isMobile]);
+
+  const clampZoom = useCallback(
+    (value: number) => Math.max(MIN_ZOOM, Math.min(maxZoom, value)),
+    [maxZoom],
   );
 
   useEffect(() => {
@@ -671,12 +681,12 @@ const lastBrushPreview = useRef<{
     if (e.nativeEvent.ctrlKey) {
       // Pinch zoom - more sensitive
       const zoomFactor = delta > 0 ? 0.95 : 1.05;
-      const newZoom = Math.max(0.1, Math.min(5, zoom * zoomFactor));
+      const newZoom = clampZoom(zoom * zoomFactor);
       onZoomChange(newZoom);
     } else {
       // Regular scroll - slower zoom
       const zoomFactor = delta > 0 ? 0.97 : 1.03;
-      const newZoom = Math.max(0.1, Math.min(5, zoom * zoomFactor));
+      const newZoom = clampZoom(zoom * zoomFactor);
       onZoomChange(newZoom);
     }
   };
@@ -737,7 +747,7 @@ const lastBrushPreview = useRef<{
       const distance = getTouchDistance(e.touches);
       if (touchDistance > 0) {
         const scale = distance / touchDistance;
-        const newZoom = Math.max(0.1, Math.min(5, initialZoom.current * scale));
+        const newZoom = clampZoom(initialZoom.current * scale);
         onZoomChange(newZoom);
       }
 
@@ -832,7 +842,9 @@ const lastBrushPreview = useRef<{
     canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
     canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
     canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
-    canvas.addEventListener("touchcancel", handleTouchCancel, { passive: false });
+    canvas.addEventListener("touchcancel", handleTouchCancel, {
+      passive: false,
+    });
 
     return () => {
       canvas.removeEventListener("touchstart", handleTouchStart);
